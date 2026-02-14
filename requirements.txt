@@ -1,0 +1,11 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+ffmpeg-python==0.2.0
+pydantic==2.5.0
+python-dotenv==1.0.0
+faster-whisper==1.2.1
+ctranslate2>=4.0,<5
+onnxruntime>=1.14,<2
+av>=11
+filelock>=3.23.0
