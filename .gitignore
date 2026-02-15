@@ -1,0 +1,19 @@
+# Virtual Environment
+backend_v2/venv/
+venv/
+
+# Secrets
+.env
+
+# Python Cache
+**/__pycache__/
+*.pyc
+
+# Outputs, Cache & Temporary files
+backend_v2/outputs/
+backend_v2/cache/
+backend_v2/uploads/
+
+# Media files 
+*.mp4
+*.mov

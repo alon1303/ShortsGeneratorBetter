@@ -1,14 +1,22 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import shutil
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 import uuid
+import asyncio
 from pydantic import BaseModel
 import logging
 
 from video_processor import create_shorts_with_captions, batch_process_shorts
+
+# Import Reddit Stories modules
+from reddit_story.reddit_client import RedditClient, RedditStory
+from reddit_story.story_processor import StoryProcessor
+from reddit_story.elevenlabs_client import ElevenLabsClient, generate_story_audio
+from reddit_story.video_composer import VideoComposer, create_shorts_video
+from reddit_story.background_manager import BackgroundManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -70,6 +78,47 @@ class BatchProcessResponse(BaseModel):
     failed_files: Optional[List[Dict[str, str]]] = None
     processed_files: Optional[List[Dict[str, Any]]] = None
     error: Optional[str] = None
+
+
+# Reddit Stories Models
+class RedditStoryRequest(BaseModel):
+    """Request model for Reddit story generation."""
+    story_url: Optional[str] = None
+    story_text: Optional[str] = None
+    subreddit: Optional[str] = "AskReddit"
+    theme: Optional[str] = None
+    voice_id: Optional[str] = None
+    max_duration_minutes: Optional[int] = 3
+    split_strategy: Optional[str] = "HYBRID"
+
+
+class RedditStoryResponse(BaseModel):
+    """Response model for Reddit story generation."""
+    success: bool
+    message: str
+    job_id: Optional[str] = None
+    story_id: Optional[str] = None
+    estimated_duration: Optional[float] = None
+    parts_count: Optional[int] = None
+    video_path: Optional[str] = None
+    error: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class RedditStoryStatus(BaseModel):
+    """Status model for Reddit story processing."""
+    job_id: str
+    status: str  # "pending", "processing", "completed", "failed"
+    progress: float  # 0.0 to 1.0
+    message: str
+    story_id: Optional[str] = None
+    video_path: Optional[str] = None
+    error: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+# In-memory job tracking (in production, use a database)
+_jobs: Dict[str, Dict[str, Any]] = {}
 
 @app.get("/")
 async def root():
@@ -276,6 +325,399 @@ async def batch_process(request: BatchProcessRequest):
             message="Internal server error during batch processing",
             error=f"Unexpected error: {str(e)}"
         )
+
+
+# Reddit Stories Endpoints
+async def process_reddit_story_background(job_id: str, request: RedditStoryRequest):
+    """
+    Background task to process a Reddit story into a Shorts video.
+    
+    Args:
+        job_id: Unique job ID
+        request: Reddit story request
+    """
+    try:
+        # Update job status to processing
+        _jobs[job_id]["status"] = "processing"
+        _jobs[job_id]["progress"] = 0.1
+        _jobs[job_id]["message"] = "Starting Reddit story processing..."
+        
+        logger.info(f"Starting Reddit story processing for job {job_id}")
+        
+        # Step 1: Get or create Reddit story
+        story = None
+        if request.story_url:
+            # Fetch story from Reddit URL
+            _jobs[job_id]["message"] = "Fetching story from Reddit URL..."
+            _jobs[job_id]["progress"] = 0.2
+            
+            reddit_client = RedditClient()
+            story = await reddit_client.fetch_story_from_url(request.story_url)
+            
+            if not story:
+                raise ValueError(f"Failed to fetch story from URL: {request.story_url}")
+                
+        elif request.story_text:
+            # Create story from provided text
+            _jobs[job_id]["message"] = "Creating story from provided text..."
+            _jobs[job_id]["progress"] = 0.2
+            
+            story = RedditStory(
+                id=str(uuid.uuid4()),
+                title="Custom Story",
+                text=request.story_text,
+                subreddit=request.subreddit or "AskReddit",
+                url="",
+                score=100,
+                upvote_ratio=0.95,
+                created_utc=0.0,
+                author="custom",
+                is_nsfw=False,
+                word_count=len(request.story_text.split()),
+                estimated_duration=len(request.story_text.split()) / 150 * 60,  # 150 WPM
+            )
+        elif request.subreddit:
+            # Fetch trending story from subreddit
+            _jobs[job_id]["message"] = f"Fetching trending story from r/{request.subreddit}..."
+            _jobs[job_id]["progress"] = 0.2
+            
+            reddit_client = RedditClient()
+            stories = await reddit_client.fetch_trending_stories(
+                subreddit=request.subreddit,
+                time_filter="day",
+                limit=5,
+                min_score=100,
+                min_text_length=200,
+                max_text_length=5000,
+                exclude_nsfw=True,
+            )
+            
+            if not stories:
+                raise ValueError(f"No trending stories found in r/{request.subreddit}")
+            
+            # Select the first story (highest score)
+            story = stories[0]
+            logger.info(f"Selected story from r/{request.subreddit}: {story.title[:50]}...")
+        else:
+            raise ValueError("Either story_url, story_text, or subreddit must be provided")
+        
+        # Store story ID
+        _jobs[job_id]["story_id"] = story.id
+        _jobs[job_id]["metadata"] = {
+            "title": story.title,
+            "subreddit": story.subreddit,
+            "author": story.author,
+            "word_count": story.word_count,
+            "estimated_duration": story.estimated_duration,
+        }
+        
+        # Step 2: Process story into parts
+        _jobs[job_id]["message"] = "Processing story into parts..."
+        _jobs[job_id]["progress"] = 0.3
+        
+        processor = StoryProcessor()
+        processed_story = processor.process_story(story)
+        
+        _jobs[job_id]["parts_count"] = processed_story.total_parts
+        _jobs[job_id]["estimated_duration"] = processed_story.total_duration
+        _jobs[job_id]["message"] = f"Story split into {processed_story.total_parts} parts"
+        
+        # Step 3: Generate audio narration
+        _jobs[job_id]["message"] = "Generating audio narration..."
+        _jobs[job_id]["progress"] = 0.5
+        
+        # Extract text chunks and add CTAs for audience retention
+        text_chunks = []
+        for i, part in enumerate(processed_story.parts, 1):
+            text = part.text
+            
+            # Add Call To Action at the end of every chunk EXCEPT the last one
+            if i < len(processed_story.parts):
+                # Append CTA for audience retention
+                cta = f" Like and subscribe for part {i + 1}!"
+                text += cta
+                logger.info(f"Added CTA to part {i}: '{cta}'")
+            
+            text_chunks.append(text)
+        
+        # Generate audio chunks
+        audio_chunks = await generate_story_audio(
+            text_chunks=text_chunks,
+            voice_id=request.voice_id,
+        )
+        
+        _jobs[job_id]["message"] = f"Audio generated for {len(audio_chunks)} parts"
+        _jobs[job_id]["progress"] = 0.7
+        
+        # Step 4: Create separate video parts in post-specific folder
+        _jobs[job_id]["message"] = "Creating separate video parts in post-specific folder..."
+        _jobs[job_id]["progress"] = 0.8
+        
+        composer = VideoComposer()
+        
+        # Create post-specific folder using sanitized title or post ID
+        # Sanitize the title for folder name (remove special characters, limit length)
+        import re
+        sanitized_title = re.sub(r'[^\w\s-]', '', story.title).strip().replace(' ', '_')
+        sanitized_title = sanitized_title[:50]  # Limit length
+        
+        # Create post-specific folder
+        post_folder_name = f"{sanitized_title}_{story.id[:8]}"
+        post_output_dir = OUTPUT_DIR / "reddit_stories" / post_folder_name
+        post_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"Creating video parts in post-specific folder: {post_output_dir}")
+        
+        # Create separate video parts
+        video_parts = composer.create_separate_video_parts(
+            audio_chunks=audio_chunks,
+            output_dir=post_output_dir,
+            theme=request.theme
+        )
+        
+        if not video_parts:
+            raise ValueError("Failed to create video parts")
+        
+        # Step 5: Update job status
+        _jobs[job_id]["status"] = "completed"
+        _jobs[job_id]["progress"] = 1.0
+        _jobs[job_id]["message"] = f"Reddit story video parts created successfully: {len(video_parts)} parts"
+        _jobs[job_id]["video_path"] = str(post_output_dir)  # Store directory path instead of single file
+        
+        # Add video metadata
+        try:
+            total_duration = 0
+            for video_part in video_parts:
+                cmd = [
+                    'ffprobe',
+                    '-v', 'quiet',
+                    '-show_entries', 'format=duration',
+                    '-of', 'default=noprint_wrappers=1:nokey=1',
+                    str(video_part)
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                duration = float(result.stdout.strip()) if result.stdout else 0
+                total_duration += duration
+            
+            _jobs[job_id]["metadata"]["video_duration"] = total_duration
+            _jobs[job_id]["metadata"]["parts_count"] = len(video_parts)
+            _jobs[job_id]["metadata"]["output_dir"] = str(post_output_dir)
+            _jobs[job_id]["metadata"]["video_parts"] = [str(p) for p in video_parts]
+        except Exception as e:
+            logger.warning(f"Could not get video durations: {e}")
+        
+        logger.info(f"Reddit story processing completed for job {job_id}: {len(video_parts)} parts in {post_output_dir}")
+        
+    except Exception as e:
+        logger.error(f"Error processing Reddit story for job {job_id}: {e}")
+        _jobs[job_id]["status"] = "failed"
+        _jobs[job_id]["progress"] = 1.0
+        _jobs[job_id]["message"] = f"Failed to process Reddit story: {str(e)}"
+        _jobs[job_id]["error"] = str(e)
+
+
+@app.post("/generate/reddit-story", response_model=RedditStoryResponse)
+async def generate_reddit_story(
+    request: RedditStoryRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Generate a Shorts video from a Reddit story.
+    
+    This endpoint starts the processing in the background and immediately returns
+    a job ID for tracking progress.
+    
+    Request body should contain either:
+    - story_url: URL to a Reddit post
+    - story_text: Direct text content
+    
+    Optional parameters:
+    - theme: Background theme (e.g., "minecraft", "abstract")
+    - voice_id: ElevenLabs voice ID
+    - max_duration_minutes: Maximum video duration
+    - split_strategy: How to split the story ("HYBRID", "PARAGRAPH", "SENTENCE")
+    """
+    try:
+        # Validate request - allow subreddit-only input
+        if not request.story_url and not request.story_text and not request.subreddit:
+            return RedditStoryResponse(
+                success=False,
+                message="Either story_url, story_text, or subreddit must be provided",
+                error="Missing required field"
+            )
+        
+        # Generate job ID
+        job_id = str(uuid.uuid4())
+        
+        # Initialize job tracking
+        _jobs[job_id] = {
+            "status": "pending",
+            "progress": 0.0,
+            "message": "Job created, waiting to start",
+            "story_id": None,
+            "video_path": None,
+            "error": None,
+            "metadata": {},
+            "created_at": asyncio.get_event_loop().time(),
+        }
+        
+        # Add background task
+        background_tasks.add_task(process_reddit_story_background, job_id, request)
+        
+        logger.info(f"Started Reddit story processing job: {job_id}")
+        
+        return RedditStoryResponse(
+            success=True,
+            message="Reddit story processing started in background",
+            job_id=job_id,
+            metadata={
+                "job_id": job_id,
+                "status": "pending",
+                "estimated_time": "Processing time varies based on story length",
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error starting Reddit story processing: {e}")
+        return RedditStoryResponse(
+            success=False,
+            message="Failed to start Reddit story processing",
+            error=str(e)
+        )
+
+
+@app.get("/reddit-story/status/{job_id}", response_model=RedditStoryStatus)
+async def get_reddit_story_status(job_id: str):
+    """
+    Get the status of a Reddit story processing job.
+    
+    Args:
+        job_id: Job ID returned by /generate/reddit-story
+        
+    Returns:
+        Current status, progress, and result if available
+    """
+    if job_id not in _jobs:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Job not found: {job_id}"
+        )
+    
+    job = _jobs[job_id]
+    
+    return RedditStoryStatus(
+        job_id=job_id,
+        status=job["status"],
+        progress=job["progress"],
+        message=job["message"],
+        story_id=job.get("story_id"),
+        video_path=job.get("video_path"),
+        error=job.get("error"),
+        metadata=job.get("metadata", {}),
+    )
+
+
+@app.get("/reddit-story/jobs")
+async def list_reddit_story_jobs():
+    """
+    List all Reddit story processing jobs.
+    
+    Returns:
+        List of job IDs and their statuses
+    """
+    jobs_list = []
+    for job_id, job in _jobs.items():
+        jobs_list.append({
+            "job_id": job_id,
+            "status": job["status"],
+            "progress": job["progress"],
+            "message": job["message"],
+            "story_id": job.get("story_id"),
+            "created_at": job.get("created_at"),
+        })
+    
+    # Sort by creation time (newest first)
+    jobs_list.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+    
+    return {
+        "total_jobs": len(jobs_list),
+        "jobs": jobs_list,
+    }
+
+
+@app.get("/reddit-story/themes")
+async def get_reddit_story_themes():
+    """
+    Get available background themes for Reddit stories.
+    
+    Returns:
+        List of available theme names
+    """
+    try:
+        background_manager = BackgroundManager()
+        themes = background_manager.get_available_themes()
+        
+        return {
+            "success": True,
+            "themes": themes,
+            "total_themes": len(themes),
+        }
+    except Exception as e:
+        logger.error(f"Error getting themes: {e}")
+        return {
+            "success": False,
+            "themes": [],
+            "error": str(e),
+        }
+
+
+@app.get("/reddit-story/voices")
+async def get_reddit_story_voices():
+    """
+    Get available ElevenLabs voices for Reddit stories.
+    
+    Returns:
+        List of available voice IDs and names
+    """
+    try:
+        # Check if ElevenLabs is configured
+        from config.settings import settings
+        if not settings.is_elevenlabs_configured():
+            return {
+                "success": False,
+                "voices": [],
+                "message": "ElevenLabs API not configured",
+                "error": "Set ELEVENLABS_API_KEY in .env file",
+            }
+        
+        # Get available voices
+        async with ElevenLabsClient() as client:
+            voices = await client.get_available_voices()
+        
+        # Format voice information
+        formatted_voices = []
+        for voice in voices:
+            formatted_voices.append({
+                "voice_id": voice.get("voice_id"),
+                "name": voice.get("name"),
+                "category": voice.get("category"),
+                "description": voice.get("description"),
+                "preview_url": voice.get("preview_url"),
+            })
+        
+        return {
+            "success": True,
+            "voices": formatted_voices,
+            "total_voices": len(formatted_voices),
+        }
+    except Exception as e:
+        logger.error(f"Error getting voices: {e}")
+        return {
+            "success": False,
+            "voices": [],
+            "error": str(e),
+        }
+
 
 @app.get("/health")
 async def health_check():

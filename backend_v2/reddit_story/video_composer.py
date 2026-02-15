@@ -1,0 +1,861 @@
+"""
+Video Composer for Reddit Stories Shorts.
+Combines audio narration with background videos and adds Shorts-style subtitles.
+"""
+
+import logging
+import tempfile
+import subprocess
+import json
+from pathlib import Path
+from typing import List, Optional, Dict, Any, Tuple
+import uuid
+
+from config.settings import settings
+from .background_manager import BackgroundManager
+from .elevenlabs_client import AudioChunk, WordTimestamp
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+class VideoComposer:
+    """Composes Shorts videos by combining audio, background, and subtitles."""
+    
+    def __init__(self, background_manager: Optional[BackgroundManager] = None):
+        """
+        Initialize video composer.
+        
+        Args:
+            background_manager: Optional BackgroundManager instance
+        """
+        self.background_manager = background_manager or BackgroundManager()
+        
+        logger.info("VideoComposer initialized")
+    
+    def create_subtitles_for_text(
+        self,
+        text: str,
+        audio_duration: float,
+        output_path: Path,
+        word_timestamps: Optional[List[WordTimestamp]] = None
+    ) -> bool:
+        """
+        Create ASS subtitles for text with word-level highlighting.
+        
+        Args:
+            text: Text to create subtitles for
+            audio_duration: Duration of the audio in seconds
+            output_path: Path where subtitles will be saved
+            word_timestamps: Optional list of WordTimestamp objects for precise word timing
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Split text into words if no timestamps provided
+            if word_timestamps is None:
+                words = text.split()
+                word_count = len(words)
+                
+                if word_count == 0:
+                    logger.error("No words in text for subtitles")
+                    return False
+                
+                # Calculate average word duration
+                avg_word_duration = audio_duration / word_count
+                
+                # Create simulated word timings
+                word_timestamps = []
+                current_time = 0.0
+                
+                for word in words:
+                    # Vary word duration slightly for natural feel
+                    word_duration = avg_word_duration * (0.8 + 0.4 * (hash(word) % 100) / 100)
+                    word_end = current_time + word_duration
+                    
+                    word_timestamps.append(WordTimestamp(
+                        word=word,
+                        start=current_time,
+                        end=word_end,
+                        confidence=0.95
+                    ))
+                    
+                    current_time = word_end
+                
+                # Adjust to match total audio duration
+                if current_time > 0:
+                    scale_factor = audio_duration / current_time
+                    for ts in word_timestamps:
+                        ts.start *= scale_factor
+                        ts.end *= scale_factor
+            
+            if not word_timestamps:
+                logger.error("No word timestamps available for subtitles")
+                return False
+            
+            # Generate advanced ASS subtitles with word-level highlighting
+            style = """[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: TikTokBase,Arial,70,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,8,0,5,0,0,0,1
+Style: TikTokHighlight,Arial,70,&H0000FFFF,&H0000FFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,8,0,5,0,0,0,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+            
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(style)
+                
+                # Group words into chunks of 3-5 words for display
+                i = 0
+                while i < len(word_timestamps):
+                    # Find a group of 3-5 words that fit within a reasonable time window
+                    group_start_idx = i
+                    group_end_idx = i
+                    
+                    # Start with current word
+                    current_group_start = word_timestamps[i].start
+                    current_group_end = word_timestamps[i].end
+                    
+                    # Try to add more words to the group
+                    for j in range(i + 1, min(i + 5, len(word_timestamps))):
+                        # Check if adding this word keeps the group duration reasonable
+                        potential_end = word_timestamps[j].end
+                        group_duration = potential_end - current_group_start
+                        
+                        # Don't let groups get too long (max 3 seconds)
+                        if group_duration > 3.0:
+                            break
+                        
+                        # Don't let gaps between words be too large (max 0.5 seconds)
+                        if j > i and word_timestamps[j].start - word_timestamps[j-1].end > 0.5:
+                            break
+                        
+                        group_end_idx = j
+                        current_group_end = potential_end
+                    
+                    # Create the group
+                    group_words = word_timestamps[group_start_idx:group_end_idx + 1]
+                    group_start = group_words[0].start
+                    group_end = group_words[-1].end
+                    
+                    # Format times for ASS
+                    def format_time(seconds: float) -> str:
+                        hours = int(seconds // 3600)
+                        minutes = int((seconds % 3600) // 60)
+                        secs = seconds % 60
+                        return f"{hours}:{minutes:02d}:{secs:05.2f}"
+                    
+                    # Create dialogue entries for the entire group
+                    # First, create a base line with all words in white
+                    all_words_text = " ".join(word.word.upper() for word in group_words)
+                    base_line = f"Dialogue: 0,{format_time(group_start)},{format_time(group_end)},TikTokBase,,0,0,0,,{all_words_text}"
+                    f.write(base_line + "\n")
+                    
+                    # Now create highlight lines for each word at its specific timing
+                    for word_idx, word_ts in enumerate(group_words):
+                        # Calculate highlight duration (word duration with some padding)
+                        highlight_start = max(group_start, word_ts.start - 0.05)  # Start 50ms early
+                        highlight_end = min(group_end, word_ts.end + 0.05)       # End 50ms late
+                        
+                        # Create highlight text with yellow color and slight scale increase
+                        highlight_text = word_ts.word.upper()
+                        
+                        # Create ASS override tags for highlighting
+                        # {\c&H00FFFF&} = Yellow color (BGR format: &H00FFFF& = Yellow)
+                        # {\fscx120\fscy120} = 120% scale
+                        # {\t(0,80,\fscx100\fscy100)} = Scale animation from 100% to 120% over 80ms
+                        highlight_tags = "{\\\\c&H00FFFF&\\\\fscx120\\\\fscy120}"
+                        
+                        # Create dialogue entry for highlighted word
+                        highlight_line = f"Dialogue: 1,{format_time(highlight_start)},{format_time(highlight_end)},TikTokHighlight,,0,0,0,,{highlight_tags}{highlight_text}"
+                        f.write(highlight_line + "\n")
+                    
+                    i = group_end_idx + 1
+            
+            logger.info(f"Advanced subtitles created: {output_path} ({len(word_timestamps)} words)")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to create subtitles: {e}")
+            return False
+    
+    def combine_audio_with_background(
+        self,
+        audio_path: Path,
+        background_path: Path,
+        output_path: Path,
+        subtitle_path: Optional[Path] = None,
+        overlay_image_path: Optional[Path] = None,
+        pop_sfx_path: Optional[Path] = None
+    ) -> bool:
+        """
+        Combine audio with background video and optionally add subtitles, overlay image, and pop SFX.
+        Uses sequential steps to avoid complex filter_complex issues.
+        
+        Args:
+            audio_path: Path to audio file
+            background_path: Path to background video
+            output_path: Path where combined video will be saved
+            subtitle_path: Optional path to subtitle file
+            overlay_image_path: Optional path to overlay image (Reddit post)
+            pop_sfx_path: Optional path to pop sound effect
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Get audio duration
+            audio_cmd = [
+                'ffprobe',
+                '-v', 'quiet',
+                '-show_entries', 'format=duration',
+                '-of', 'default=noprint_wrappers=1:nokey=1',
+                str(audio_path)
+            ]
+            
+            audio_result = subprocess.run(audio_cmd, capture_output=True, text=True)
+            audio_duration = float(audio_result.stdout.strip()) if audio_result.stdout else 0
+            
+            if audio_duration <= 0:
+                logger.error(f"Invalid audio duration: {audio_duration}")
+                return False
+            
+            # Get background video duration
+            bg_cmd = [
+                'ffprobe',
+                '-v', 'quiet',
+                '-show_entries', 'format=duration',
+                '-of', 'default=noprint_wrappers=1:nokey=1',
+                str(background_path)
+            ]
+            
+            bg_result = subprocess.run(bg_cmd, capture_output=True, text=True)
+            bg_duration = float(bg_result.stdout.strip()) if bg_result.stdout else 0
+            
+            if bg_duration < audio_duration:
+                logger.warning(f"Background ({bg_duration:.1f}s) is shorter than audio ({audio_duration:.1f}s)")
+                # We'll loop the background if needed
+                loop_count = int(audio_duration / bg_duration) + 1
+                logger.info(f"Will loop background {loop_count} times")
+            
+            # Create temporary directory for intermediate files
+            import tempfile
+            import shutil
+            temp_dir = tempfile.mkdtemp()
+            temp_path = Path(temp_dir)
+            
+            # Copy all input files to temp directory
+            logger.info(f"Copying input files to temp directory: {temp_path}")
+            
+            # Copy audio file
+            audio_temp = temp_path / audio_path.name
+            shutil.copy2(audio_path, audio_temp)
+            logger.debug(f"Copied audio: {audio_path} -> {audio_temp}")
+            
+            # Copy background video
+            background_temp = temp_path / background_path.name
+            shutil.copy2(background_path, background_temp)
+            logger.debug(f"Copied background: {background_path} -> {background_temp}")
+            
+            # Copy overlay image if provided
+            overlay_temp = None
+            if overlay_image_path and overlay_image_path.exists():
+                overlay_temp = temp_path / overlay_image_path.name
+                shutil.copy2(overlay_image_path, overlay_temp)
+                logger.debug(f"Copied overlay: {overlay_image_path} -> {overlay_temp}")
+            
+            # Copy pop SFX if provided
+            pop_sfx_temp = None
+            if pop_sfx_path and pop_sfx_path.exists():
+                pop_sfx_temp = temp_path / pop_sfx_path.name
+                shutil.copy2(pop_sfx_path, pop_sfx_temp)
+                logger.debug(f"Copied pop SFX: {pop_sfx_path} -> {pop_sfx_temp}")
+            
+            # Copy subtitle file if provided
+            subtitle_temp = None
+            if subtitle_path and subtitle_path.exists():
+                subtitle_temp = temp_path / subtitle_path.name
+                shutil.copy2(subtitle_path, subtitle_temp)
+                logger.debug(f"Copied subtitles: {subtitle_path} -> {subtitle_temp}")
+            
+            # Step 1: Handle background looping if needed
+            current_video_path = background_temp
+            if bg_duration < audio_duration:
+                loop_count = int(audio_duration / bg_duration) + 1
+                looped_video_path = temp_path / "background_looped.mp4"
+                
+                loop_cmd = [
+                    'ffmpeg',
+                    '-y',
+                    '-stream_loop', str(loop_count - 1),  # FFmpeg loops n times total, so loop_count-1 for additional loops
+                    '-i', background_temp.name,
+                    '-t', str(audio_duration),  # Limit to audio duration
+                    '-c:v', 'libx264',
+                    '-preset', 'veryfast',
+                    '-crf', '23',
+                    '-movflags', '+faststart',
+                    looped_video_path.name
+                ]
+                
+                logger.info(f"Looping background {loop_count} times")
+                result = subprocess.run(loop_cmd, capture_output=True, text=True, cwd=temp_path)
+                if result.returncode != 0:
+                    logger.error(f"Failed to loop background: {result.stderr}")
+                    # Clean up temp directory
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                    return False
+                
+                current_video_path = looped_video_path
+            
+            # Step 2: Add overlay image (visual hook) if provided
+            if overlay_temp and overlay_temp.exists():
+                hook_video_path = temp_path / "video_with_hook.mp4"
+                
+                # Scale overlay to 80% width and overlay for first 4 seconds
+                overlay_cmd = [
+                    'ffmpeg',
+                    '-y',
+                    '-i', current_video_path.name,
+                    '-i', overlay_temp.name,
+                    '-filter_complex',
+                    f'[1:v]scale=w=0.8*iw:h=0.8*ih/sar:force_original_aspect_ratio=decrease[overlay_scaled];'
+                    f'[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:enable=\'between(t,0,4)\'',
+                    '-c:v', 'libx264',
+                    '-preset', 'veryfast',
+                    '-crf', '23',
+                    '-c:a', 'copy',  # Copy audio if exists
+                    '-movflags', '+faststart',
+                    hook_video_path.name
+                ]
+                
+                logger.info(f"Adding overlay image: {overlay_temp.name}")
+                result = subprocess.run(overlay_cmd, capture_output=True, text=True, cwd=temp_path)
+                if result.returncode != 0:
+                    logger.error(f"Failed to add overlay: {result.stderr}")
+                    # Continue without overlay
+                    logger.warning("Continuing without overlay")
+                else:
+                    current_video_path = hook_video_path
+            
+            # Step 3: Mix audio with pop SFX if provided
+            current_audio_path = audio_temp
+            if pop_sfx_temp and pop_sfx_temp.exists():
+                mixed_audio_path = temp_path / "audio_mixed.mp3"
+                
+                # Mix pop SFX with main audio
+                mix_cmd = [
+                    'ffmpeg',
+                    '-y',
+                    '-i', audio_temp.name,
+                    '-i', pop_sfx_temp.name,
+                    '-filter_complex', 'amix=inputs=2:duration=first:dropout_transition=0',
+                    '-c:a', 'libmp3lame',
+                    '-b:a', '128k',
+                    mixed_audio_path.name
+                ]
+                
+                logger.info(f"Mixing pop SFX with audio: {pop_sfx_temp.name}")
+                result = subprocess.run(mix_cmd, capture_output=True, text=True, cwd=temp_path)
+                if result.returncode != 0:
+                    logger.error(f"Failed to mix audio: {result.stderr}")
+                    # Continue without pop SFX
+                    logger.warning("Continuing without pop SFX")
+                else:
+                    current_audio_path = mixed_audio_path
+            
+            # Step 4: Final assembly with subtitles
+            logger.info(f"Final assembly: {current_video_path.name} + {current_audio_path.name}")
+            
+            # Build final command
+            cmd = [
+                'ffmpeg',
+                '-y',
+                '-i', current_video_path.name,
+                '-i', current_audio_path.name,
+            ]
+            
+            # Add subtitle filter if provided
+            if subtitle_temp and subtitle_temp.exists():
+                # Use simple filename since we're in the same directory
+                cmd.extend(['-vf', f'subtitles={subtitle_temp.name}'])
+                logger.info(f"Adding subtitles: {subtitle_temp.name}")
+            
+            # Explicitly map video and audio streams to ensure audio is preserved
+            # When using -vf filter, we need to explicitly map streams
+            cmd.extend([
+                '-map', '0:v',  # Map video from first input
+                '-map', '1:a',  # Map audio from second input
+            ])
+            
+            # Add output settings
+            cmd.extend([
+                '-c:v', 'libx264',
+                '-preset', 'veryfast',
+                '-crf', '23',
+                '-c:a', 'aac',
+                '-b:a', '128k',
+                '-shortest',  # End when shortest stream ends
+                '-movflags', '+faststart',
+                output_path.name
+            ])
+            
+            logger.debug(f"Final FFmpeg command (cwd={temp_path}): {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=temp_path)
+            
+            if result.returncode != 0:
+                logger.error(f"FFmpeg failed: {result.stderr}")
+                # Clean up temp directory
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                return False
+            
+            # Copy output file from temp directory to final location
+            output_temp = temp_path / output_path.name
+            if output_temp.exists():
+                shutil.copy2(output_temp, output_path)
+                logger.debug(f"Copied output: {output_temp} -> {output_path}")
+            
+            # Clean up temp directory
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            
+            # Verify output
+            if not output_path.exists() or output_path.stat().st_size == 0:
+                logger.error(f"Output file not created: {output_path}")
+                return False
+            
+            logger.info(f"Video created successfully: {output_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to combine audio with background: {e}")
+            # Clean up temp directory if it exists
+            if 'temp_dir' in locals():
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            return False
+    
+    def create_video_part(
+        self,
+        audio_chunk: AudioChunk,
+        theme: Optional[str] = None,
+        output_path: Optional[Path] = None,
+        overlay_image_path: Optional[Path] = None,
+        pop_sfx_path: Optional[Path] = None
+    ) -> Optional[Path]:
+        """
+        Create a complete video part from an audio chunk.
+        
+        Args:
+            audio_chunk: AudioChunk with narration
+            theme: Optional theme for background
+            output_path: Optional output path
+            overlay_image_path: Optional path to overlay image (Reddit post)
+            pop_sfx_path: Optional path to pop sound effect
+            
+        Returns:
+            Path to created video, or None if failed
+        """
+        try:
+            # Validate audio chunk
+            if not audio_chunk.audio_path.exists():
+                logger.error(f"Audio file does not exist: {audio_chunk.audio_path}")
+                return None
+            
+            if audio_chunk.duration_seconds <= 0:
+                logger.error(f"Invalid audio duration: {audio_chunk.duration_seconds}")
+                return None
+            
+            # Create output path if not provided
+            if output_path is None:
+                temp_dir = Path(tempfile.gettempdir())
+                output_path = temp_dir / f"video_part_{uuid.uuid4()}.mp4"
+            
+            # Create temporary directory for intermediate files
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir)
+                
+                # Step 1: Create background clip
+                logger.info(f"Creating background clip for {audio_chunk.duration_seconds:.1f}s audio")
+                background_path = self.background_manager.create_background_clip(
+                    duration=audio_chunk.duration_seconds,
+                    theme=theme,
+                    output_path=temp_path / "background.mp4"
+                )
+                
+                if not background_path:
+                    logger.error("Failed to create background clip")
+                    return None
+                
+                # Step 2: Create subtitles
+                subtitle_path = temp_path / "subtitles.ass"
+                logger.info(f"Creating subtitles for text: {audio_chunk.text[:50]}...")
+                subtitle_success = self.create_subtitles_for_text(
+                    text=audio_chunk.text,
+                    audio_duration=audio_chunk.duration_seconds,
+                    output_path=subtitle_path,
+                    word_timestamps=audio_chunk.word_timestamps
+                )
+                
+                if not subtitle_success:
+                    logger.warning("Failed to create subtitles, continuing without them")
+                    subtitle_path = None
+                
+                # Step 3: Combine audio with background, subtitles, overlay, and pop SFX
+                logger.info("Combining audio with background and visual hook")
+                success = self.combine_audio_with_background(
+                    audio_path=audio_chunk.audio_path,
+                    background_path=background_path,
+                    output_path=output_path,
+                    subtitle_path=subtitle_path,
+                    overlay_image_path=overlay_image_path,
+                    pop_sfx_path=pop_sfx_path
+                )
+                
+                if not success:
+                    logger.error("Failed to combine audio with background")
+                    return None
+            
+            logger.info(f"Video part created successfully: {output_path}")
+            return output_path
+            
+        except Exception as e:
+            logger.error(f"Failed to create video part: {e}")
+            return None
+    
+    def concatenate_videos(
+        self,
+        video_paths: List[Path],
+        output_path: Path
+    ) -> bool:
+        """
+        Concatenate multiple video files into a single video.
+        
+        Args:
+            video_paths: List of paths to video files
+            output_path: Path where concatenated video will be saved
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if not video_paths:
+                logger.error("No video files to concatenate")
+                return False
+            
+            # Create file list for ffmpeg
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+                for video_path in video_paths:
+                    if video_path.exists():
+                        # Escape single quotes and backslashes for Windows paths
+                        path_str = str(video_path).replace('\\', '\\\\').replace("'", "'\\''")
+                        f.write(f"file '{path_str}'\n")
+                    else:
+                        logger.warning(f"Video file does not exist, skipping: {video_path}")
+                
+                filelist_path = Path(f.name)
+            
+            try:
+                # Build ffmpeg command for concatenation
+                cmd = [
+                    'ffmpeg',
+                    '-y',
+                    '-f', 'concat',
+                    '-safe', '0',
+                    '-i', str(filelist_path),
+                    '-c', 'copy',  # Copy codec (fast, no re-encoding)
+                    '-movflags', '+faststart',
+                    str(output_path)
+                ]
+                
+                logger.info(f"Concatenating {len(video_paths)} videos")
+                logger.debug(f"FFmpeg command: {' '.join(cmd)}")
+                
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                
+                if result.returncode != 0:
+                    logger.error(f"FFmpeg concatenation failed: {result.stderr}")
+                    return False
+                
+                # Verify output
+                if not output_path.exists() or output_path.stat().st_size == 0:
+                    logger.error(f"Concatenated video not created: {output_path}")
+                    return False
+                
+                logger.info(f"Videos concatenated successfully: {output_path}")
+                return True
+                
+            finally:
+                # Clean up file list
+                filelist_path.unlink()
+                
+        except Exception as e:
+            logger.error(f"Failed to concatenate videos: {e}")
+            return False
+    
+    def create_complete_shorts_video(
+        self,
+        audio_chunks: List[AudioChunk],
+        theme: Optional[str] = None,
+        output_path: Optional[Path] = None,
+        overlay_image_path: Optional[Path] = None,
+        pop_sfx_path: Optional[Path] = None
+    ) -> Optional[Path]:
+        """
+        Create a complete Shorts video from multiple audio chunks.
+        
+        Args:
+            audio_chunks: List of AudioChunk objects
+            theme: Optional theme for background
+            output_path: Optional output path
+            overlay_image_path: Optional path to overlay image (Reddit post)
+            pop_sfx_path: Optional path to pop sound effect
+            
+        Returns:
+            Path to created video, or None if failed
+        """
+        try:
+            if not audio_chunks:
+                logger.error("No audio chunks provided")
+                return None
+            
+            # Create output path if not provided
+            if output_path is None:
+                output_dir = settings.OUTPUT_DIR / "reddit_stories"
+                output_dir.mkdir(parents=True, exist_ok=True)
+                output_path = output_dir / f"shorts_{uuid.uuid4()}.mp4"
+            
+            # Create temporary directory for intermediate files
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir)
+                video_parts = []
+                
+                # Create video part for each audio chunk
+                for i, audio_chunk in enumerate(audio_chunks, 1):
+                    logger.info(f"Creating video part {i}/{len(audio_chunks)}")
+                    
+                    # Skip chunks with 0.0s duration (audio generation failed)
+                    if audio_chunk.duration_seconds <= 0:
+                        logger.warning(f"Skipping audio chunk {i} with 0.0s duration (audio generation failed)")
+                        continue
+                    
+                    # Create unique part path to prevent overwriting
+                    part_path = temp_path / f"part_{i}_{uuid.uuid4().hex[:8]}.mp4"
+                    video_part = self.create_video_part(
+                        audio_chunk=audio_chunk,
+                        theme=theme,
+                        output_path=part_path,
+                        overlay_image_path=overlay_image_path if i == 1 else None,  # Only add overlay to first part
+                        pop_sfx_path=pop_sfx_path if i == 1 else None  # Only add pop SFX to first part
+                    )
+                    
+                    if video_part:
+                        video_parts.append(video_part)
+                        logger.info(f"Video part {i} created: {video_part}")
+                    else:
+                        logger.error(f"Failed to create video part {i}")
+                        # Continue with other parts
+                
+                if not video_parts:
+                    logger.error("No video parts were created successfully")
+                    return None
+                
+                # Concatenate all video parts
+                if len(video_parts) == 1:
+                    # Only one part, just copy it
+                    import shutil
+                    shutil.copy2(video_parts[0], output_path)
+                    logger.info(f"Single video part copied to: {output_path}")
+                else:
+                    # Concatenate multiple parts
+                    success = self.concatenate_videos(video_parts, output_path)
+                    if not success:
+                        logger.error("Failed to concatenate video parts")
+                        return None
+                
+                # Verify final video
+                if not output_path.exists() or output_path.stat().st_size == 0:
+                    logger.error(f"Final video not created: {output_path}")
+                    return None
+                
+                # Get video metadata
+                try:
+                    cmd = [
+                        'ffprobe',
+                        '-v', 'quiet',
+                        '-show_entries', 'format=duration',
+                        '-of', 'default=noprint_wrappers=1:nokey=1',
+                        str(output_path)
+                    ]
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    duration = float(result.stdout.strip()) if result.stdout else 0
+                    logger.info(f"Final video created: {output_path} ({duration:.1f}s)")
+                except Exception as e:
+                    logger.warning(f"Could not get final video duration: {e}")
+                
+                return output_path
+                
+        except Exception as e:
+            logger.error(f"Failed to create complete shorts video: {e}")
+            return None
+    
+    def create_separate_video_parts(
+        self,
+        audio_chunks: List[AudioChunk],
+        output_dir: Path,
+        theme: Optional[str] = None,
+        overlay_image_path: Optional[Path] = None,
+        pop_sfx_path: Optional[Path] = None
+    ) -> List[Path]:
+        """
+        Create separate video parts for each audio chunk and save them to the specified directory.
+        
+        Args:
+            audio_chunks: List of AudioChunk objects
+            output_dir: Directory where video parts will be saved
+            theme: Optional theme for background
+            overlay_image_path: Optional path to overlay image (Reddit post)
+            pop_sfx_path: Optional path to pop sound effect
+            
+        Returns:
+            List of paths to created video parts
+        """
+        try:
+            if not audio_chunks:
+                logger.error("No audio chunks provided")
+                return []
+            
+            # Create output directory if it doesn't exist
+            output_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Creating separate video parts in directory: {output_dir}")
+            
+            video_parts = []
+            
+            # Create video part for each audio chunk
+            for i, audio_chunk in enumerate(audio_chunks, 1):
+                logger.info(f"Creating video part {i}/{len(audio_chunks)}")
+                
+                # Skip chunks with 0.0s duration (audio generation failed)
+                if audio_chunk.duration_seconds <= 0:
+                    logger.warning(f"Skipping audio chunk {i} with 0.0s duration (audio generation failed)")
+                    continue
+                
+                # Create unique part path with part number and UUID
+                part_filename = f"part_{i}_{uuid.uuid4().hex[:8]}.mp4"
+                part_path = output_dir / part_filename
+                
+                # Create video part
+                video_part = self.create_video_part(
+                    audio_chunk=audio_chunk,
+                    theme=theme,
+                    output_path=part_path,
+                    overlay_image_path=overlay_image_path if i == 1 else None,  # Only add overlay to first part
+                    pop_sfx_path=pop_sfx_path if i == 1 else None  # Only add pop SFX to first part
+                )
+                
+                if video_part:
+                    video_parts.append(video_part)
+                    logger.info(f"Video part {i} created: {video_part}")
+                else:
+                    logger.error(f"Failed to create video part {i}")
+                    # Continue with other parts
+            
+            logger.info(f"Created {len(video_parts)} video parts in {output_dir}")
+            return video_parts
+                
+        except Exception as e:
+            logger.error(f"Failed to create separate video parts: {e}")
+            return []
+
+
+# Utility functions for direct use
+def create_shorts_video(
+    audio_chunks: List[AudioChunk],
+    theme: Optional[str] = None,
+    output_path: Optional[Path] = None,
+    overlay_image_path: Optional[Path] = None,
+    pop_sfx_path: Optional[Path] = None
+) -> Optional[Path]:
+    """
+    Convenience function to create a Shorts video from audio chunks.
+    
+    Args:
+        audio_chunks: List of AudioChunk objects
+        theme: Optional theme for background
+        output_path: Optional output path
+        overlay_image_path: Optional path to overlay image (Reddit post)
+        pop_sfx_path: Optional path to pop sound effect
+        
+    Returns:
+        Path to created video, or None if failed
+    """
+    composer = VideoComposer()
+    return composer.create_complete_shorts_video(
+        audio_chunks, 
+        theme, 
+        output_path,
+        overlay_image_path,
+        pop_sfx_path
+    )
+
+
+# Example usage
+if __name__ == "__main__":
+    import asyncio
+    
+    async def example():
+        # Create mock audio chunks for testing
+        mock_chunks = [
+            AudioChunk(
+                chunk_id="1",
+                text="This is the first part of the Reddit story.",
+                audio_path=Path("/tmp/test_audio1.mp3"),
+                duration_seconds=5.0,
+                voice_id="test_voice",
+                file_size_bytes=1024,
+            ),
+            AudioChunk(
+                chunk_id="2",
+                text="This is the second part with more details.",
+                audio_path=Path("/tmp/test_audio2.mp3"),
+                duration_seconds=6.0,
+                voice_id="test_voice",
+                file_size_bytes=2048,
+            ),
+        ]
+        
+        # Create video composer
+        composer = VideoComposer()
+        
+        # Test subtitle creation
+        print("Testing subtitle creation...")
+        subtitle_path = Path("/tmp/test_subtitles.ass")
+        success = composer.create_subtitles_for_text(
+            text="This is a test for subtitle generation.",
+            audio_duration=5.0,
+            output_path=subtitle_path
+        )
+        
+        if success:
+            print(f"Subtitles created: {subtitle_path}")
+            # Clean up
+            if subtitle_path.exists():
+                subtitle_path.unlink()
+        
+        # Test video creation (will fail without actual audio files)
+        print("\nTesting video creation (mock)...")
+        print("Note: This will fail without actual audio files.")
+        print("In real usage, provide actual AudioChunk objects with valid audio files.")
+        
+        # Show available themes
+        themes = composer.background_manager.get_available_themes()
+        print(f"\nAvailable background themes: {themes}")
+        
+        print("\nExample completed!")
+    
+    # Run example
+    asyncio.run(example())
