@@ -208,28 +208,43 @@ class ElevenLabsClient:
     
     async def _estimate_audio_duration(self, audio_path: Path) -> float:
         """
-        Estimate audio duration from file size (approximate).
-        For MP3 files, approximate duration based on bitrate.
+        Get accurate audio duration using ffprobe.
         
         Args:
             audio_path: Path to audio file
             
         Returns:
-            Estimated duration in seconds
+            Accurate duration in seconds
         """
         try:
-            # Get file size
-            file_size = audio_path.stat().st_size
+            import subprocess
+            import json
             
-            # Approximate MP3 duration: file_size / (bitrate / 8)
-            # Using average bitrate of 128 kbps (16000 bytes per second)
-            # This is approximate but works for our use case
-            estimated_duration = file_size / 16000
+            # Use ffprobe to get accurate duration
+            cmd = [
+                'ffprobe',
+                '-v', 'quiet',
+                '-show_entries', 'format=duration',
+                '-of', 'json',
+                str(audio_path)
+            ]
             
-            return estimated_duration
-            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                data = json.loads(result.stdout)
+                duration = float(data['format']['duration'])
+                logger.debug(f"Accurate audio duration from ffprobe: {duration:.3f}s")
+                return duration
+            else:
+                logger.warning(f"ffprobe failed for {audio_path}: {result.stderr}")
+                # Fallback to file size estimation
+                file_size = audio_path.stat().st_size
+                estimated_duration = file_size / 16000
+                logger.warning(f"Using estimated duration: {estimated_duration:.3f}s (file size: {file_size} bytes)")
+                return estimated_duration
+                
         except Exception as e:
-            logger.warning(f"Could not estimate audio duration: {e}")
+            logger.warning(f"Could not get audio duration: {e}")
             # Fallback: estimate based on text length (150 words/minute)
             return 0.0
     
@@ -342,6 +357,11 @@ class ElevenLabsClient:
                 params=params,
                 headers={"xi-api-key": self.api_key}
             ) as response:
+                # DEBUG: Print raw response info as requested
+                print(f"DEBUG: ElevenLabs API Response Status: {response.status}")
+                response_text_raw = await response.text()
+                print(f"DEBUG: ElevenLabs API Response Text (first 200 chars): {response_text_raw[:200]}")
+                
                 if response.status == 200:
                     # Check content type
                     content_type = response.headers.get('Content-Type', '')
@@ -365,23 +385,76 @@ class ElevenLabsClient:
                             cache_key, audio_data, text, voice_id
                         )
                         
-                        # Extract word timestamps
+                        # Extract word timestamps from character-level alignment data
                         word_timestamps = []
                         alignment_data = response_data.get('alignment')
-                        if alignment_data:
-                            for alignment in alignment_data:
-                                word = alignment.get('text', '').strip()
-                                if word:  # Skip empty words
-                                    # Convert milliseconds to seconds
-                                    start_ms = alignment.get('char_start_times_ms', [0])[0]
-                                    end_ms = alignment.get('char_end_times_ms', [0])[-1]
+                        if alignment_data and isinstance(alignment_data, dict):
+                            # Get character arrays from the alignment dictionary
+                            characters = alignment_data.get('characters', [])
+                            # Try different key names for start/end times
+                            start_times = alignment_data.get('character_start_times_seconds', [])
+                            end_times = alignment_data.get('character_end_times_seconds', [])
+                            
+                            # Fallback to millisecond keys if second keys not found
+                            if not start_times:
+                                start_times_ms = alignment_data.get('char_start_times_ms', [])
+                                start_times = [ms / 1000.0 for ms in start_times_ms]
+                            if not end_times:
+                                end_times_ms = alignment_data.get('char_end_times_ms', [])
+                                end_times = [ms / 1000.0 for ms in end_times_ms]
+                            
+                            # Ensure all arrays have the same length
+                            if characters and start_times and end_times:
+                                min_len = min(len(characters), len(start_times), len(end_times))
+                                if min_len > 0:
+                                    # Group characters into words based on spaces
+                                    current_word = []
+                                    word_start_time = 0.0
                                     
-                                    word_timestamps.append(WordTimestamp(
-                                        word=word,
-                                        start=start_ms / 1000.0,
-                                        end=end_ms / 1000.0,
-                                        confidence=alignment.get('confidence', 1.0)
-                                    ))
+                                    for i in range(min_len):
+                                        char = characters[i]
+                                        char_start = start_times[i]
+                                        char_end = end_times[i]
+                                        
+                                        # If this is the first character of a word, record start time
+                                        if not current_word:
+                                            word_start_time = char_start
+                                        
+                                        # Add character to current word
+                                        current_word.append(char)
+                                        
+                                        # Check if this character ends a word (space or last character)
+                                        is_space = char == ' '
+                                        is_last_char = i == min_len - 1
+                                        
+                                        if is_space or is_last_char:
+                                            # Remove trailing space if present
+                                            if is_space and current_word:
+                                                current_word.pop()  # Remove the space
+                                            
+                                            if current_word:  # Only create word if we have characters
+                                                word_text = ''.join(current_word).strip()
+                                                if word_text:  # Skip empty words
+                                                    # Word end time is the end time of the last character
+                                                    word_end_time = char_end
+                                                    
+                                                    word_timestamps.append(WordTimestamp(
+                                                        word=word_text,
+                                                        start=word_start_time,
+                                                        end=word_end_time,
+                                                        confidence=1.0  # Default confidence
+                                                    ))
+                                                
+                                                # Reset for next word
+                                                current_word = []
+                                    
+                                    logger.debug(f"Extracted {len(word_timestamps)} words from {min_len} characters")
+                                else:
+                                    logger.warning("Alignment data has zero-length arrays")
+                            else:
+                                logger.warning("Missing character or timing data in alignment")
+                        elif alignment_data:
+                            logger.warning(f"Unexpected alignment data type: {type(alignment_data)}")
                         
                         # Save timestamps to cache
                         if word_timestamps:
@@ -470,13 +543,11 @@ class ElevenLabsClient:
                     
         except asyncio.TimeoutError:
             logger.error(f"ElevenLabs API timeout after {self.timeout}s")
-            return None, 0.0, None
+            raise  # Re-raise to crash loudly
         except aiohttp.ClientError as e:
             logger.error(f"ElevenLabs API client error: {e}")
-            return None, 0.0, None
-        except Exception as e:
-            logger.error(f"Unexpected error in text_to_speech_with_timestamps: {e}")
-            return None, 0.0, None
+            raise  # Re-raise to crash loudly
+        # REMOVED generic Exception handler - let it crash
     
     async def text_to_speech(
         self,

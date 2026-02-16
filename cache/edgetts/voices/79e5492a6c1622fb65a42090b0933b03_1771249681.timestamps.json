@@ -1,0 +1,16 @@
+{
+  "word_timestamps": [
+    {
+      "word": "Test",
+      "start": 0.1,
+      "end": 0.4625,
+      "confidence": 1.0
+    },
+    {
+      "word": "compatibility",
+      "start": 0.4875,
+      "end": 1.5125,
+      "confidence": 1.0
+    }
+  ]
+}

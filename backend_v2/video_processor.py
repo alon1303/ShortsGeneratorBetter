@@ -14,6 +14,9 @@ from faster_whisper import WhisperModel
 import json
 from dataclasses import dataclass
 
+# Import the new subtitle generator
+from reddit_story.subtitle_generator import SubtitleGenerator, WordTimestamp as SubtitleWordTimestamp
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -177,8 +180,8 @@ def transcribe_with_word_timestamps(audio_path: str, model_size: str = "base") -
 
 def generate_ass_subtitles(segments: List[Segment], output_path: str, video_width: int = 1080, video_height: int = 1920) -> bool:
     """
-    Generate Advanced Substation Alpha (.ass) file with MrBeast/Speed TikTok style captions.
-    Features: 1-2 words per line, pop-in animation, bold font, ALL CAPS, center alignment.
+    Generate Advanced Substation Alpha (.ass) file with perfect timing and no overlaps.
+    Uses the new SubtitleGenerator for phrase-based chunking and dynamic highlighting.
     
     Args:
         segments: List of segments with word-level timestamps
@@ -190,66 +193,47 @@ def generate_ass_subtitles(segments: List[Segment], output_path: str, video_widt
         True if successful, False otherwise
     """
     try:
-        # MrBeast/Speed TikTok style: 
-        # - Very bold font (Impact)
-        # - Large font size (90)
-        # - ALL CAPS text
-        # - Thick black outline (Outline=8)
-        # - Centered on screen (Alignment=5)
-        # - Bright Yellow text color (&H0000FFFF = BBGGRR format)
-        # - Pop-in animation with scaling
-        style = """[Script Info]
-ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
-ScaledBorderAndShadow: yes
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: TikTokStyle,Impact,90,&H0000FFFF,&H0000FFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,8,0,5,0,0,0,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-"""
+        # Flatten all words from all segments
+        all_words = []
+        for segment in segments:
+            for word in segment.words:
+                # Convert WordTimestamp to SubtitleWordTimestamp
+                all_words.append(SubtitleWordTimestamp(
+                    word=word.word,
+                    start=word.start,
+                    end=word.end,
+                    confidence=word.confidence
+                ))
         
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(style)
-            
-            # Group words into 1-2 word chunks for fast-paced display
-            for segment in segments:
-                words = segment.words
-                i = 0
-                while i < len(words):
-                    # Group 1-2 words together
-                    if i + 1 < len(words):
-                        # Group 2 words if they're close in time (within 0.3 seconds)
-                        if words[i+1].start - words[i].end < 0.3:
-                            word_group = [words[i], words[i+1]]
-                            i += 2
-                        else:
-                            word_group = [words[i]]
-                            i += 1
-                    else:
-                        word_group = [words[i]]
-                        i += 1
-                    
-                    # Calculate timing for the group
-                    group_start = word_group[0].start
-                    group_end = word_group[-1].end
-                    
-                    # Create the text for the group (ALL CAPS)
-                    group_text = " ".join(word.word.upper() for word in word_group)
-                    
-                    # Add pop-in animation: scale from 50% to 100% over 80ms
-                    # {\fscx50\fscy50\t(0,80,\fscx100\fscy100)} for scale animation
-                    animated_text = "{\\\\fscx50\\\\fscy50\\\\t(0,80,\\\\fscx100\\\\fscy100)}" + group_text
-                    
-                    # Create dialogue entry for this word group
-                    dialogue_line = f"Dialogue: 0,{format_time(group_start)},{format_time(group_end)},TikTokStyle,,0,0,0,,{animated_text}"
-                    f.write(dialogue_line + "\n")
+        if not all_words:
+            logger.error("No words found in segments")
+            return False
         
-        logger.info(f"ASS subtitles generated with TikTok style: {output_path}")
-        return True
+        # Calculate total audio duration from last word end time
+        audio_duration = max(word.end for word in all_words) if all_words else 0
+        
+        # Create subtitle generator
+        generator = SubtitleGenerator(
+            video_width=video_width,
+            video_height=video_height,
+            max_words_per_phrase=5,
+            min_words_per_phrase=2,
+            max_phrase_duration=3.0,
+            min_gap_between_phrases=0.1
+        )
+        
+        # Generate ASS file
+        success = generator.generate_ass_from_word_timestamps(
+            word_timestamps=all_words,
+            audio_duration=audio_duration,
+            output_path=Path(output_path)
+        )
+        
+        if success:
+            logger.info(f"ASS subtitles generated with perfect timing: {output_path}")
+            logger.info(f"  Words: {len(all_words)}, Duration: {audio_duration:.2f}s")
+        
+        return success
         
     except Exception as e:
         logger.error(f"Error generating ASS subtitles: {e}")

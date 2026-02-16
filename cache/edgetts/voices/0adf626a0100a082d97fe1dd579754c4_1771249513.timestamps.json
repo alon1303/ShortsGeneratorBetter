@@ -1,0 +1,58 @@
+{
+  "word_timestamps": [
+    {
+      "word": "Hello",
+      "start": 0.1,
+      "end": 0.525,
+      "confidence": 1.0
+    },
+    {
+      "word": "this",
+      "start": 0.725,
+      "end": 0.9,
+      "confidence": 1.0
+    },
+    {
+      "word": "is",
+      "start": 0.9125,
+      "end": 1.025,
+      "confidence": 1.0
+    },
+    {
+      "word": "a",
+      "start": 1.05,
+      "end": 1.1125,
+      "confidence": 1.0
+    },
+    {
+      "word": "test",
+      "start": 1.125,
+      "end": 1.4875,
+      "confidence": 1.0
+    },
+    {
+      "word": "of",
+      "start": 1.5125,
+      "end": 1.5875,
+      "confidence": 1.0
+    },
+    {
+      "word": "the",
+      "start": 1.6125,
+      "end": 1.7,
+      "confidence": 1.0
+    },
+    {
+      "word": "TTS",
+      "start": 1.725,
+      "end": 2.2625,
+      "confidence": 1.0
+    },
+    {
+      "word": "router",
+      "start": 2.2875,
+      "end": 2.7375,
+      "confidence": 1.0
+    }
+  ]
+}

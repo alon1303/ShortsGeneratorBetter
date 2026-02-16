@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     ELEVENLABS_VOICE_JOSH: str = "TxGEqnHWrfWFTfGW9XjX"    # Casual male
     DEFAULT_VOICE_ID: str = ELEVENLABS_VOICE_RACHEL
     
+    # TTS Engine Configuration
+    TTS_ENGINE: str = "edge"  # "edge" or "elevenlabs"
+    
     # Background video settings
     DEFAULT_BACKGROUND_THEME: str = "minecraft"
     BACKGROUND_THEMES: List[str] = ["minecraft", "abstract", "nature", "lofi"]
