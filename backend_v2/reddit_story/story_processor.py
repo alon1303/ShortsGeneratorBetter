@@ -307,8 +307,8 @@ class StoryProcessor:
             f"({story.word_count} words, {story.estimated_duration:.1f}s)"
         )
         
-        # Prepend title with a period for natural pause
-        text = f"{story.title}.\n\n{story.text}"
+        # Use only story text (title is handled separately in audio generation pipeline)
+        text = story.text
         original_length = len(text)
         
         # Step 1: Initial segmentation based on strategy

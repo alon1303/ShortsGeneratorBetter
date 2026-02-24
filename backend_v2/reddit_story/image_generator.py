@@ -1,6 +1,6 @@
 """
 Reddit Image Generator for creating visual hooks.
-Generates dark-mode Reddit post overlays for video intros.
+Generates light-mode Reddit post overlays for video intros.
 Includes two implementations:
 1. RedditTitleCardGenerator: Pillow-based with dynamic text wrapping (primary)
 2. RedditImageGenerator: HTML2Image-based with web rendering (fallback)
@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 TITLE_CARD_WIDTH = 800
 TITLE_CARD_HEIGHT = 400
 TITLE_FONT_SIZE = 36
-TITLE_FONT_COLOR = (255, 255, 255)  # White
-TITLE_BG_COLOR = (26, 26, 27)  # Reddit dark gray
-TITLE_BORDER_COLOR = (52, 53, 54)  # Reddit medium gray
+TITLE_FONT_COLOR = (34, 34, 34)  # Dark gray #222222
+TITLE_BG_COLOR = (255, 255, 255)  # White #FFFFFF
+TITLE_BORDER_COLOR = (237, 239, 241)  # Light gray #EDEFF1
 TITLE_TEXT_PADDING = 30
 MAX_TITLE_LINES = 4
 
@@ -200,7 +200,7 @@ class RedditTitleCardGenerator:
             True if successful, False otherwise
         """
         try:
-            # Create a new image with Reddit dark theme colors
+            # Create a new image with Reddit light theme colors
             image = Image.new('RGBA', (TITLE_CARD_WIDTH, TITLE_CARD_HEIGHT), (0, 0, 0, 0))
             draw = ImageDraw.Draw(image)
             
@@ -227,7 +227,7 @@ class RedditTitleCardGenerator:
                     
                     # Upvotes and time
                     metadata_text = f"• {upvotes:,} upvotes • {time_ago}"
-                    draw.text((30 + subreddit_width + 15, metadata_y), metadata_text, font=metadata_font, fill=(150, 150, 150))
+                    draw.text((30 + subreddit_width + 15, metadata_y), metadata_text, font=metadata_font, fill=(120, 124, 126))
             
             # Draw title with text wrapping
             title_x = 30
@@ -261,14 +261,14 @@ class RedditTitleCardGenerator:
             
             # Vote count
             if metadata_font:
-                draw.text((vote_center_x - 10, vote_center_y + 15), str(upvotes), font=metadata_font, fill=(150, 150, 150))
+                draw.text((vote_center_x - 10, vote_center_y + 15), str(upvotes), font=metadata_font, fill=(120, 124, 126))
             
             # Downvote arrow (gray)
             draw.polygon([
                 (vote_center_x, vote_center_y + 35),
                 (vote_center_x - 10, vote_center_y + 20),
                 (vote_center_x + 10, vote_center_y + 20)
-            ], fill=(150, 150, 150))
+            ], fill=(135, 138, 140))
             
             # Save image
             image.save(output_path, 'PNG')
@@ -320,7 +320,7 @@ class RedditImageGenerator:
         flair: Optional[str] = None
     ) -> str:
         """
-        Generate HTML for a dark-mode Reddit post.
+        Generate HTML for a light-mode Reddit post.
         
         Args:
             title: Post title
@@ -343,7 +343,7 @@ class RedditImageGenerator:
         formatted_score = format_score(score)
         author_display = author or "Anonymous"
         
-        # Reddit dark mode colors
+        # Reddit light mode colors
         html_template = """
         <!DOCTYPE html>
         <html>
