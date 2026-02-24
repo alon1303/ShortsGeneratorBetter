@@ -1,0 +1,58 @@
+{
+  "word_timestamps": [
+    {
+      "word": "AITA",
+      "start": 0.1,
+      "end": 0.7625,
+      "confidence": 1.0
+    },
+    {
+      "word": "for",
+      "start": 0.775,
+      "end": 0.925,
+      "confidence": 1.0
+    },
+    {
+      "word": "refusing",
+      "start": 0.9375,
+      "end": 1.4125,
+      "confidence": 1.0
+    },
+    {
+      "word": "to",
+      "start": 1.425,
+      "end": 1.5125,
+      "confidence": 1.0
+    },
+    {
+      "word": "give",
+      "start": 1.525,
+      "end": 1.6875,
+      "confidence": 1.0
+    },
+    {
+      "word": "my",
+      "start": 1.7,
+      "end": 1.825,
+      "confidence": 1.0
+    },
+    {
+      "word": "mom",
+      "start": 1.8375,
+      "end": 2.1,
+      "confidence": 1.0
+    },
+    {
+      "word": "my",
+      "start": 2.1125,
+      "end": 2.2375,
+      "confidence": 1.0
+    },
+    {
+      "word": "savings",
+      "start": 2.25,
+      "end": 2.925,
+      "confidence": 1.0
+    }
+  ]
+}

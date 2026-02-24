@@ -16,6 +16,7 @@ from .background_manager import BackgroundManager
 from .elevenlabs_client import AudioChunk, WordTimestamp
 from .subtitle_generator import SubtitleGenerator, generate_subtitles
 from .audio_utils import analyze_audio_for_offset, adjust_word_timestamps, detect_silence_at_beginning
+from .image_generator import TitlePopupTimingCalculator
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -40,7 +41,8 @@ class VideoComposer:
         audio_duration: float,
         output_path: Path,
         word_timestamps: Optional[List[WordTimestamp]] = None,
-        audio_path: Optional[Path] = None
+        audio_path: Optional[Path] = None,
+        title_offset: float = 0.0
     ) -> bool:
         """
         Create ASS subtitles for text with word-level highlighting.
@@ -52,6 +54,7 @@ class VideoComposer:
             output_path: Path where subtitles will be saved
             word_timestamps: Optional list of WordTimestamp objects for precise word timing
             audio_path: Optional path to audio file for offset detection
+            title_offset: Offset to apply to all subtitle timestamps (for title audio)
             
         Returns:
             True if successful, raises exception otherwise
@@ -75,11 +78,16 @@ class VideoComposer:
                 logger.info(f"Detected {silence_offset:.3f}s silence at beginning of audio, adjusting subtitles")
                 adjusted_word_timestamps = adjust_word_timestamps(word_timestamps, -silence_offset)
         
+        # Apply title offset if provided
+        if title_offset > 0 and adjusted_word_timestamps:
+            logger.info(f"Applying title offset: {title_offset:.3f}s")
+            adjusted_word_timestamps = adjust_word_timestamps(adjusted_word_timestamps, title_offset)
+        
         if adjusted_word_timestamps:
             # Use precise word timestamps from ElevenLabs (with offset correction if needed)
             success = generator.generate_ass_from_word_timestamps(
                 word_timestamps=adjusted_word_timestamps,
-                audio_duration=audio_duration,
+                audio_duration=audio_duration + title_offset,  # Total duration includes title offset
                 output_path=output_path
             )
             if not success:
@@ -90,7 +98,7 @@ class VideoComposer:
             # This will raise RuntimeError if it fails
             return generator.generate_ass_from_text(
                 text=text,
-                audio_duration=audio_duration,
+                audio_duration=audio_duration + title_offset,  # Total duration includes title offset
                 output_path=output_path
             )
     
@@ -101,7 +109,9 @@ class VideoComposer:
         output_path: Path,
         subtitle_path: Optional[Path] = None,
         overlay_image_path: Optional[Path] = None,
-        pop_sfx_path: Optional[Path] = None
+        pop_sfx_path: Optional[Path] = None,
+        timing_data: Optional[Dict[str, Any]] = None,
+        hook_duration: Optional[float] = None
     ) -> bool:
         """
         Combine audio with background video and optionally add subtitles, overlay image, and pop SFX.
@@ -114,6 +124,8 @@ class VideoComposer:
             subtitle_path: Optional path to subtitle file
             overlay_image_path: Optional path to overlay image (Reddit post)
             pop_sfx_path: Optional path to pop sound effect
+            timing_data: Optional timing data dict with 'card_start_time' and 'card_end_time'
+            hook_duration: Optional hook duration in seconds (used when timing_data not provided)
             
         Returns:
             True if successful, False otherwise
@@ -226,15 +238,51 @@ class VideoComposer:
             if overlay_temp and overlay_temp.exists():
                 hook_video_path = temp_path / "video_with_hook.mp4"
                 
-                # Scale overlay to 80% width and overlay for first 4 seconds
+                # Determine overlay timing and animation
+                if timing_data and 'card_start_time' in timing_data and 'card_end_time' in timing_data:
+                    card_start = timing_data['card_start_time']
+                    card_end = timing_data['card_end_time']
+                    
+                    # Check if we have enough data to use TitlePopupTimingCalculator for pop-in animation
+                    if ('title_audio_duration' in timing_data and 'buffer_seconds' in timing_data and 
+                        'pop_in_duration' in timing_data):
+                        # Create calculator for pop-in animation
+                        calculator = TitlePopupTimingCalculator(
+                            title_audio_duration=timing_data['title_audio_duration'],
+                            buffer_seconds=timing_data['buffer_seconds']
+                        )
+                        filter_complex = calculator.get_ffmpeg_filter_for_animation(overlay_temp)
+                        logger.info(f"Using pop-in animation with timing: {card_start:.2f}s to {card_end:.2f}s")
+                    else:
+                        # Fallback to simple scale overlay
+                        filter_complex = (
+                            f'[1:v]scale=w=0.8*iw:h=0.8*ih/sar:force_original_aspect_ratio=decrease[overlay_scaled];'
+                            f'[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:enable=\'between(t,{card_start},{card_end})\''
+                        )
+                        logger.info(f"Using simple overlay timing: {card_start:.2f}s to {card_end:.2f}s")
+                else:
+                    # Use hook_duration if provided, otherwise default to 4 seconds
+                    card_start = 0.0
+                    if hook_duration is not None and hook_duration > 0:
+                        card_end = hook_duration
+                        logger.info(f"Using hook_duration for overlay timing: {card_start:.2f}s to {card_end:.2f}s")
+                    else:
+                        # Default to first 4 seconds (legacy behavior)
+                        card_end = 4.0
+                        logger.info(f"Using default overlay timing: {card_start:.2f}s to {card_end:.2f}s")
+                    
+                    filter_complex = (
+                        f'[1:v]scale=w=0.8*iw:h=0.8*ih/sar:force_original_aspect_ratio=decrease[overlay_scaled];'
+                        f'[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:enable=\'between(t,{card_start},{card_end})\''
+                    )
+                
+                # Build overlay command with filter_complex
                 overlay_cmd = [
                     'ffmpeg',
                     '-y',
                     '-i', current_video_path.name,
                     '-i', overlay_temp.name,
-                    '-filter_complex',
-                    f'[1:v]scale=w=0.8*iw:h=0.8*ih/sar:force_original_aspect_ratio=decrease[overlay_scaled];'
-                    f'[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:enable=\'between(t,0,4)\'',
+                    '-filter_complex', filter_complex,
                     '-c:v', 'libx264',
                     '-preset', 'veryfast',
                     '-crf', '23',
@@ -244,11 +292,13 @@ class VideoComposer:
                 ]
                 
                 logger.info(f"Adding overlay image: {overlay_temp.name}")
+                logger.debug(f"Filter complex: {filter_complex}")
                 result = subprocess.run(overlay_cmd, capture_output=True, text=True, cwd=temp_path)
                 if result.returncode != 0:
                     logger.error(f"Failed to add overlay: {result.stderr}")
-                    # Continue without overlay
-                    logger.warning("Continuing without overlay")
+                    # Clean up temp directory and raise exception (fail-fast)
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                    raise RuntimeError(f"FFmpeg overlay failed: {result.stderr}")
                 else:
                     current_video_path = hook_video_path
             
@@ -353,7 +403,9 @@ class VideoComposer:
         theme: Optional[str] = None,
         output_path: Optional[Path] = None,
         overlay_image_path: Optional[Path] = None,
-        pop_sfx_path: Optional[Path] = None
+        pop_sfx_path: Optional[Path] = None,
+        timing_data: Optional[Dict[str, Any]] = None,
+        hook_duration: Optional[float] = None
     ) -> Optional[Path]:
         """
         Create a complete video part from an audio chunk.
@@ -364,6 +416,7 @@ class VideoComposer:
             output_path: Optional output path
             overlay_image_path: Optional path to overlay image (Reddit post)
             pop_sfx_path: Optional path to pop sound effect
+            timing_data: Optional timing data for overlay display
             
         Returns:
             Path to created video, raises exception on failure
@@ -399,13 +452,20 @@ class VideoComposer:
             subtitle_path = temp_path / "subtitles.ass"
             logger.info(f"Creating subtitles for text: {audio_chunk.text[:50]}...")
             
+            # Extract title offset from timing_data if available
+            title_offset = 0.0
+            if timing_data and 'subtitle_start_time' in timing_data:
+                title_offset = timing_data['subtitle_start_time']
+                logger.info(f"Using title offset from timing_data: {title_offset:.3f}s")
+            
             # This will raise an exception if subtitle generation fails
             self.create_subtitles_for_text(
                 text=audio_chunk.text,
                 audio_duration=audio_chunk.duration_seconds,
                 output_path=subtitle_path,
                 word_timestamps=audio_chunk.word_timestamps,
-                audio_path=audio_chunk.audio_path  # Pass audio path for offset detection
+                audio_path=audio_chunk.audio_path,  # Pass audio path for offset detection
+                title_offset=title_offset  # Pass title offset for subtitle timing
             )
             
             # Step 3: Combine audio with background, subtitles, overlay, and pop SFX
@@ -416,7 +476,9 @@ class VideoComposer:
                 output_path=output_path,
                 subtitle_path=subtitle_path,
                 overlay_image_path=overlay_image_path,
-                pop_sfx_path=pop_sfx_path
+                pop_sfx_path=pop_sfx_path,
+                timing_data=timing_data,
+                hook_duration=hook_duration
             )
             
             if not success:

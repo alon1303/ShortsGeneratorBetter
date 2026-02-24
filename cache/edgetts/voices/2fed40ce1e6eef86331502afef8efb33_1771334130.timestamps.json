@@ -1,0 +1,46 @@
+{
+  "word_timestamps": [
+    {
+      "word": "She",
+      "start": 0.1,
+      "end": 0.35,
+      "confidence": 1.0
+    },
+    {
+      "word": "says",
+      "start": 0.3625,
+      "end": 0.6875,
+      "confidence": 1.0
+    },
+    {
+      "word": "I'm",
+      "start": 0.7,
+      "end": 0.825,
+      "confidence": 1.0
+    },
+    {
+      "word": "being",
+      "start": 0.8375,
+      "end": 1.0625,
+      "confidence": 1.0
+    },
+    {
+      "word": "selfish",
+      "start": 1.075,
+      "end": 1.625,
+      "confidence": 1.0
+    },
+    {
+      "word": "and",
+      "start": 1.6375,
+      "end": 1.7875,
+      "confidence": 1.0
+    },
+    {
+      "word": "ungrateful",
+      "start": 1.8,
+      "end": 2.5875,
+      "confidence": 1.0
+    }
+  ]
+}

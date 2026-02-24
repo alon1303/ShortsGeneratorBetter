@@ -8,6 +8,7 @@ import uuid
 import asyncio
 from pydantic import BaseModel
 import logging
+import subprocess
 
 from video_processor import create_shorts_with_captions, batch_process_shorts
 
@@ -17,6 +18,9 @@ from reddit_story.story_processor import StoryProcessor
 from reddit_story.tts_router import get_tts_client, generate_story_audio_compat as generate_story_audio
 from reddit_story.video_composer import VideoComposer, create_shorts_video
 from reddit_story.background_manager import BackgroundManager
+
+# Import settings
+from config.settings import settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -422,9 +426,49 @@ async def process_reddit_story_background(job_id: str, request: RedditStoryReque
         _jobs[job_id]["estimated_duration"] = processed_story.total_duration
         _jobs[job_id]["message"] = f"Story split into {processed_story.total_parts} parts"
         
-        # Step 3: Generate audio narration
-        _jobs[job_id]["message"] = "Generating audio narration..."
-        _jobs[job_id]["progress"] = 0.5
+        # Step 3: Create post-specific folder
+        _jobs[job_id]["message"] = "Creating post-specific folder..."
+        _jobs[job_id]["progress"] = 0.4
+        
+        # Create post-specific folder using sanitized title or post ID
+        import re
+        sanitized_title = re.sub(r'[^\w\s-]', '', story.title).strip().replace(' ', '_')
+        sanitized_title = sanitized_title[:50]  # Limit length
+        
+        # Create post-specific folder
+        post_folder_name = f"{sanitized_title}_{story.id[:8]}"
+        post_output_dir = OUTPUT_DIR / "reddit_stories" / post_folder_name
+        post_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"Creating post-specific folder: {post_output_dir}")
+        
+        # Step 4: Generate title card
+        _jobs[job_id]["message"] = "Generating title card..."
+        _jobs[job_id]["progress"] = 0.45
+        
+        # Import title card generator
+        from reddit_story.image_generator import get_title_card_generator, TitlePopupTimingCalculator
+        
+        # Generate title card
+        title_card_generator = get_title_card_generator(use_pillow=True)
+        title_card_path = post_output_dir / "title_card.png"
+        
+        success = title_card_generator.generate_title_card(
+            title=story.title,
+            output_path=title_card_path,
+            subreddit=f"r/{story.subreddit}",
+            upvotes=story.score,
+            time_ago="5 hours ago"
+        )
+        
+        if not success or not title_card_path.exists():
+            raise RuntimeError(f"Failed to generate title card: {title_card_path}")
+        
+        logger.info(f"Title card generated: {title_card_path}")
+        
+        # Step 5: Generate title and story audio with timing data
+        _jobs[job_id]["message"] = "Generating audio narration with title popup timing..."
+        _jobs[job_id]["progress"] = 0.55
         
         # Extract text chunks and add CTAs for audience retention
         text_chunks = []
@@ -440,40 +484,75 @@ async def process_reddit_story_background(job_id: str, request: RedditStoryReque
             
             text_chunks.append(text)
         
-        # Generate audio chunks
-        audio_chunks = await generate_story_audio(
-            text_chunks=text_chunks,
-            voice_id=request.voice_id,
+        # Generate title and story audio with timing data
+        from reddit_story.tts_router import generate_title_and_story_audio
+        final_audio_path, story_audio_chunks, title_duration, timing_data = await generate_title_and_story_audio(
+            title=story.title,
+            story_text_chunks=text_chunks,
+            voice=request.voice_id,
+            title_voice=request.voice_id,
+            engine=settings.TTS_ENGINE.lower(),
+            buffer_seconds=0.2,
         )
         
-        _jobs[job_id]["message"] = f"Audio generated for {len(audio_chunks)} parts"
+        _jobs[job_id]["message"] = f"Audio generated for {len(story_audio_chunks)} parts"
         _jobs[job_id]["progress"] = 0.7
         
-        # Step 4: Create separate video parts in post-specific folder
-        _jobs[job_id]["message"] = "Creating separate video parts in post-specific folder..."
+        # Store timing data in metadata
+        _jobs[job_id]["metadata"]["title_duration"] = title_duration
+        _jobs[job_id]["metadata"]["timing_data"] = timing_data
+        
+        # Step 6: Create separate video parts in post-specific folder
+        _jobs[job_id]["message"] = "Creating separate video parts in post-specific folder with title popup..."
         _jobs[job_id]["progress"] = 0.8
         
         composer = VideoComposer()
         
-        # Create post-specific folder using sanitized title or post ID
-        # Sanitize the title for folder name (remove special characters, limit length)
-        import re
-        sanitized_title = re.sub(r'[^\w\s-]', '', story.title).strip().replace(' ', '_')
-        sanitized_title = sanitized_title[:50]  # Limit length
-        
-        # Create post-specific folder
-        post_folder_name = f"{sanitized_title}_{story.id[:8]}"
-        post_output_dir = OUTPUT_DIR / "reddit_stories" / post_folder_name
-        post_output_dir.mkdir(parents=True, exist_ok=True)
-        
         logger.info(f"Creating video parts in post-specific folder: {post_output_dir}")
         
-        # Create separate video parts
-        video_parts = composer.create_separate_video_parts(
-            audio_chunks=audio_chunks,
-            output_dir=post_output_dir,
-            theme=request.theme
-        )
+        # Create separate video parts with title card and timing data
+        video_parts = []
+        for i, audio_chunk in enumerate(story_audio_chunks, 1):
+            logger.info(f"Creating video part {i}/{len(story_audio_chunks)}")
+            
+            # Skip chunks with 0.0s duration (audio generation failed)
+            if audio_chunk.duration_seconds <= 0:
+                logger.warning(f"Skipping audio chunk {i} with 0.0s duration (audio generation failed)")
+                continue
+            
+            # Create unique part path with part number and UUID
+            part_filename = f"part_{i}_{uuid.uuid4().hex[:8]}.mp4"
+            part_path = post_output_dir / part_filename
+            
+            try:
+                # For the first part, include title card with timing data
+                # For subsequent parts, don't include title card
+                if i == 1:
+                    video_part = composer.create_video_part(
+                        audio_chunk=audio_chunk,
+                        theme=request.theme,
+                        output_path=part_path,
+                        overlay_image_path=title_card_path,
+                        pop_sfx_path=None,  # Optional: add pop SFX if available
+                        timing_data=timing_data
+                    )
+                else:
+                    video_part = composer.create_video_part(
+                        audio_chunk=audio_chunk,
+                        theme=request.theme,
+                        output_path=part_path,
+                        overlay_image_path=None,
+                        pop_sfx_path=None,
+                        timing_data=None
+                    )
+                
+                video_parts.append(video_part)
+                logger.info(f"Video part {i} created: {video_part}")
+                
+            except Exception as e:
+                logger.error(f"Failed to create video part {i}: {e}")
+                # Continue with remaining parts
+                continue
         
         if not video_parts:
             raise ValueError("Failed to create video parts")

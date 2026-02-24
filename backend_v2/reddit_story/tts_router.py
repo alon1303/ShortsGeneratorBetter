@@ -11,6 +11,11 @@ from dataclasses import dataclass
 from config.settings import settings
 from .elevenlabs_client import ElevenLabsClient, WordTimestamp, AudioChunk
 from .edgetts_client import EdgeTTSClient
+from pathlib import Path
+from typing import Optional, Tuple, List, Dict, Any
+import subprocess
+import tempfile
+import shutil
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -96,19 +101,22 @@ class TTSRouter:
         
         logger.debug(f"Routing TTS request to {self.config.engine} engine: {len(text)} chars")
         
+        # Remove 'use_cache' from kwargs if present (we pass it explicitly)
+        kwargs_without_use_cache = {k: v for k, v in kwargs.items() if k != 'use_cache'}
+        
         if self.config.engine == "edge":
             return await client.text_to_speech_with_timestamps(
                 text=text,
                 voice=voice,
                 use_cache=self.config.use_cache,
-                **kwargs,
+                **kwargs_without_use_cache,
             )
         elif self.config.engine == "elevenlabs":
             return await client.text_to_speech_with_timestamps(
                 text=text,
                 voice_id=voice,
                 use_cache=self.config.use_cache,
-                **kwargs,
+                **kwargs_without_use_cache,
             )
         else:
             raise ValueError(f"Unknown TTS engine: {self.config.engine}")
@@ -310,6 +318,162 @@ async def generate_story_audio_compat(
         with_timestamps=with_timestamps,
         **kwargs,
     )
+
+
+async def generate_title_and_story_audio(
+    title: str,
+    story_text_chunks: List[str],
+    voice: Optional[str] = None,
+    title_voice: Optional[str] = None,
+    engine: Optional[str] = None,
+    buffer_seconds: float = 0.2,
+    **kwargs,
+) -> Tuple[Path, List[AudioChunk], float, Dict[str, Any]]:
+    """
+    Generate separate audio for title and story, concatenate them, and return timing data.
+    
+    Args:
+        title: Reddit post title to narrate
+        story_text_chunks: List of story text chunks
+        voice: Voice ID for story narration (defaults to config)
+        title_voice: Voice ID for title narration (defaults to voice if not provided)
+        engine: TTS engine ("edge" or "elevenlabs")
+        buffer_seconds: Additional buffer after title audio ends
+        **kwargs: Additional arguments for TTSRouter
+        
+    Returns:
+        Tuple of (final_audio_path, story_audio_chunks, title_duration, timing_data)
+        Raises exception on error (fail-fast)
+    """
+    # Use same voice for title if not specified
+    if title_voice is None:
+        title_voice = voice
+    
+    async with await get_tts_client(engine=engine, voice=voice) as router:
+        # Generate title audio
+        logger.info(f"Generating title audio: '{title[:50]}...'")
+        title_audio_path, title_duration, title_timestamps = await router.text_to_speech_with_timestamps(
+            text=title,
+            voice=title_voice,
+            **kwargs,
+        )
+        
+        if not title_audio_path or title_duration <= 0:
+            raise RuntimeError(f"Failed to generate title audio: {title_audio_path}, duration: {title_duration}")
+        
+        # Calculate title word count for subtitle filtering
+        title_word_count = len(title_timestamps) if title_timestamps else 0
+        logger.info(f"Title audio generated: {title_audio_path} ({title_duration:.2f}s, {title_word_count} words)")
+        
+        # Generate story audio chunks
+        logger.info(f"Generating story audio for {len(story_text_chunks)} chunks")
+        story_audio_chunks = await router.generate_audio_chunks(
+            text_chunks=story_text_chunks,
+            voice=voice,
+            with_timestamps=True,
+            **kwargs,
+        )
+        
+        if not story_audio_chunks:
+            raise RuntimeError(f"Failed to generate story audio for {len(story_text_chunks)} chunks")
+        
+        logger.info(f"Generated {len(story_audio_chunks)} story audio chunks")
+        
+        # Create temporary directory for concatenation
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Copy all audio files to temp directory to avoid path issues
+            copied_audio_files = []
+            
+            # Copy title audio
+            title_temp_path = temp_path / "title_audio.mp3"
+            shutil.copy2(title_audio_path, title_temp_path)
+            copied_audio_files.append(title_temp_path)
+            logger.debug(f"Copied title audio to temp: {title_temp_path}")
+            
+            # Copy story audio chunks
+            for i, chunk in enumerate(story_audio_chunks):
+                if chunk.audio_path.exists() and chunk.duration_seconds > 0:
+                    chunk_temp_path = temp_path / f"story_chunk_{i}.mp3"
+                    shutil.copy2(chunk.audio_path, chunk_temp_path)
+                    copied_audio_files.append(chunk_temp_path)
+                    logger.debug(f"Copied story chunk {i} to temp: {chunk_temp_path}")
+                else:
+                    logger.warning(f"Skipping invalid story chunk: {chunk.chunk_id}")
+            
+            if len(copied_audio_files) < 2:
+                raise RuntimeError(f"Not enough valid audio files to concatenate: {len(copied_audio_files)}")
+            
+            # Create file list for ffmpeg using forward slashes for Windows compatibility
+            filelist_path = temp_path / "concat_list.txt"
+            with open(filelist_path, 'w', encoding='utf-8') as f:
+                for audio_file in copied_audio_files:
+                    # Use forward slashes for Windows compatibility with ffmpeg
+                    # Convert Path to string and replace backslashes with forward slashes
+                    path_str = str(audio_file).replace('\\', '/')
+                    # Escape single quotes for ffmpeg concat format
+                    path_str = path_str.replace("'", "'\\''")
+                    f.write(f"file '{path_str}'\n")
+            
+            logger.debug(f"Created concat list at: {filelist_path}")
+            with open(filelist_path, 'r') as f:
+                logger.debug(f"Concat list contents:\n{f.read()}")
+            
+            # Concatenate audio files using ffmpeg
+            final_audio_path = temp_path / "final_audio.mp3"
+            
+            cmd = [
+                'ffmpeg',
+                '-y',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', str(filelist_path),
+                '-c', 'copy',  # Copy codec (no re-encoding)
+                str(final_audio_path)
+            ]
+            
+            logger.info(f"Concatenating {len(copied_audio_files)} audio files")
+            logger.debug(f"FFmpeg command: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                logger.error(f"FFmpeg stdout: {result.stdout}")
+                logger.error(f"FFmpeg stderr: {result.stderr}")
+                raise RuntimeError(f"FFmpeg concatenation failed: {result.stderr}")
+            
+            if not final_audio_path.exists() or final_audio_path.stat().st_size == 0:
+                raise RuntimeError(f"Final audio file not created: {final_audio_path}")
+            
+            logger.info(f"Audio concatenated successfully: {final_audio_path} ({final_audio_path.stat().st_size} bytes)")
+            
+            # Calculate timing data
+            from .image_generator import TitlePopupTimingCalculator
+            timing_calc = TitlePopupTimingCalculator(
+                title_audio_duration=title_duration,
+                buffer_seconds=buffer_seconds
+            )
+            
+            timing_data = timing_calc.to_dict()
+            # Add title word count for subtitle filtering
+            timing_data['title_word_count'] = title_word_count
+            
+            # Create final audio path in cache directory
+            cache_dir = settings.CACHE_DIR / "final_audio"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            
+            import time
+            import hashlib
+            content_hash = hashlib.md5(f"{title}{time.time()}".encode()).hexdigest()[:8]
+            final_cache_path = cache_dir / f"final_audio_{content_hash}.mp3"
+            
+            # Copy concatenated audio to cache
+            shutil.copy2(final_audio_path, final_cache_path)
+            
+            logger.info(f"Final audio cached: {final_cache_path}")
+            logger.info(f"Title duration: {title_duration:.2f}s ({title_word_count} words), Story chunks: {len(story_audio_chunks)}")
+            
+            return final_cache_path, story_audio_chunks, title_duration, timing_data
 
 
 # Test function

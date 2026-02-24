@@ -1,33 +1,24 @@
-# Role & Expertise
-You are a Senior Full-Stack Engineer and System Administrator with deep expertise in modern software architecture, video processing pipelines (FFmpeg), and performance optimization.
+# ShortsGenerator Project Rules
 
-# Operational Workflow
-1. **Analyze First**: Before suggesting or writing code, analyze the existing structure and explain your reasoning.
-2. **Step-by-Step Planning**: For complex tasks, provide a brief, clear execution plan. Wait for user approval before making massive architectural changes.
-3. **Reasoning Mode**: Leverage your thought process to identify edge cases, race conditions, and potential bugs early.
+## Architecture & Responsibilities
+- `story_processor.py`: Handles strictly text manipulation, splitting, and duration estimation.
+- `image_generator.py`: Handles visual asset generation (HTML to Image). Do not put video logic here.
+- `video_composer.py`: The only file that should execute FFmpeg commands.
+- `tts_router.py` / clients: Handle audio generation and word-level timestamps.
 
-# Coding Standards
-- **Clean Code**: Follow SOLID and DRY principles. Write decoupled and maintainable code.
-- **Performance**: Prioritize efficient algorithms and minimize resource usage, especially when handling media processing.
-- **Windows Compatibility (CRITICAL)**: NEVER use emojis, checkmarks, or any non-ASCII Unicode characters in Python scripts or `print()` statements to avoid `UnicodeEncodeError` in the Windows console. Use plain ASCII text like [OK], [PASS], or [FAIL].
-- **File Encodings**: ALWAYS specify `encoding='utf-8'` when opening, reading, or writing text files in Python to prevent Windows default encoding issues.
-- **Path Management**: Always use relative paths for temporary files (especially when interacting with external tools like FFmpeg) to avoid Windows absolute path escaping issues. Prefer Python's `pathlib` module for robust cross-platform path handling.
+## FFmpeg Best Practices
+- ALWAYS use a list of strings for `subprocess.run` arguments (e.g., `['ffmpeg', '-y', '-i', ...]`). Never use `shell=True` with concatenated strings to avoid quoting issues.
+- Avoid overly complex `filter_complex` chains if they can be broken down into sequential temporary steps. This project prefers readability and stability over single-command optimization.
+- Always use `-y` to overwrite temporary files.
+- Ensure audio mapping is explicit (`-map 0:v -map 1:a`) when using video filters (`-vf`) to prevent audio streams from being dropped.
 
-# Terminal & Execution Rules (CRITICAL FOR STABILITY)
-- **NO INLINE MULTILINE SCRIPTS**: You are STRICTLY FORBIDDEN from using `python -c` with long, multiline strings. This causes the VS Code terminal to hang and break.
-- **Proper Testing Protocol**: Whenever you need to run tests, print debug info, or analyze code behavior, you MUST follow this workflow:
-  1. Create a dedicated temporary Python file in the workspace (e.g., `test_logic.py`).
-  2. Write your test code into this file and save it.
-  3. Execute the file normally via the terminal (`python test_logic.py`).
-  4. Delete the test file immediately after you finish analyzing the results.
-- **PowerShell Syntax**: ALL terminal commands MUST follow Windows PowerShell syntax.
-- **No Chatty Commands**: NEVER execute shell commands or Python scripts solely to print status updates, success messages, or summaries. Communicate task completion and status updates directly in the chat window using plain text.
-- **Context Awareness**: Always verify your current working directory (PWD) before running commands.
+## File Handling & I/O
+- Use Python's `pathlib.Path` for all file path operations. Do not use `os.path`.
+- Always generate temporary files in a dedicated temp directory using the `tempfile` module.
+- Always clean up temporary directories and files using `try/finally` blocks or context managers.
+- Verify file existence and file size (`st_size > 0`) after any FFmpeg or external tool generation before proceeding to the next step.
 
-# Operational Constraints & Loop Prevention
-- **Zero-Repeat Policy**: You are strictly forbidden from executing the exact same command or action more than twice in a row if it results in an error.
-- **Stop & Analyze**: If an action fails twice, stop immediately. Analyze the error output, explain why it failed, and propose a completely different strategy. Do not brute-force the same solution.
-
-# Communication Style
-- Be concise and strictly technical.
-- Avoid unnecessary conversational filler.
+## Code Style & Types
+- Maintain strict type hints (`typing` module) for all function arguments and return types.
+- Log important steps using the standard Python `logging` module. Do not use `print()`.
+- Never hardcode visual durations, screen sizes, or text coordinates if they depend on variable inputs. Calculate them dynamically.

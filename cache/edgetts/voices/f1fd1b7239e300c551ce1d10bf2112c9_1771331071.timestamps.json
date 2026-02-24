@@ -1,0 +1,124 @@
+{
+  "word_timestamps": [
+    {
+      "word": "This",
+      "start": 0.1,
+      "end": 0.3625,
+      "confidence": 1.0
+    },
+    {
+      "word": "is",
+      "start": 0.375,
+      "end": 0.475,
+      "confidence": 1.0
+    },
+    {
+      "word": "a",
+      "start": 0.4875,
+      "end": 0.5625,
+      "confidence": 1.0
+    },
+    {
+      "word": "test",
+      "start": 0.575,
+      "end": 0.8875,
+      "confidence": 1.0
+    },
+    {
+      "word": "story",
+      "start": 0.9,
+      "end": 1.2625,
+      "confidence": 1.0
+    },
+    {
+      "word": "for",
+      "start": 1.275,
+      "end": 1.4375,
+      "confidence": 1.0
+    },
+    {
+      "word": "pipeline",
+      "start": 1.45,
+      "end": 1.9875,
+      "confidence": 1.0
+    },
+    {
+      "word": "integration",
+      "start": 2.0,
+      "end": 2.75,
+      "confidence": 1.0
+    },
+    {
+      "word": "It",
+      "start": 3.6125,
+      "end": 3.8125,
+      "confidence": 1.0
+    },
+    {
+      "word": "demonstrates",
+      "start": 3.825,
+      "end": 4.475,
+      "confidence": 1.0
+    },
+    {
+      "word": "the",
+      "start": 4.4875,
+      "end": 4.5875,
+      "confidence": 1.0
+    },
+    {
+      "word": "complete",
+      "start": 4.6,
+      "end": 5.0375,
+      "confidence": 1.0
+    },
+    {
+      "word": "Reddit",
+      "start": 5.05,
+      "end": 5.3375,
+      "confidence": 1.0
+    },
+    {
+      "word": "title",
+      "start": 5.35,
+      "end": 5.6875,
+      "confidence": 1.0
+    },
+    {
+      "word": "popup",
+      "start": 5.7,
+      "end": 6.1375,
+      "confidence": 1.0
+    },
+    {
+      "word": "workflow",
+      "start": 6.15,
+      "end": 6.65,
+      "confidence": 1.0
+    },
+    {
+      "word": "with",
+      "start": 6.6625,
+      "end": 6.8125,
+      "confidence": 1.0
+    },
+    {
+      "word": "proper",
+      "start": 6.825,
+      "end": 7.1875,
+      "confidence": 1.0
+    },
+    {
+      "word": "timing",
+      "start": 7.2,
+      "end": 7.6,
+      "confidence": 1.0
+    },
+    {
+      "word": "synchronization",
+      "start": 7.6125,
+      "end": 8.525,
+      "confidence": 1.0
+    }
+  ]
+}

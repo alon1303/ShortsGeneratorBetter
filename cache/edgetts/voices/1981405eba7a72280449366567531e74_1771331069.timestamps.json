@@ -1,0 +1,52 @@
+{
+  "word_timestamps": [
+    {
+      "word": "What's",
+      "start": 0.1,
+      "end": 0.3875,
+      "confidence": 1.0
+    },
+    {
+      "word": "the",
+      "start": 0.4,
+      "end": 0.475,
+      "confidence": 1.0
+    },
+    {
+      "word": "most",
+      "start": 0.4875,
+      "end": 0.7375,
+      "confidence": 1.0
+    },
+    {
+      "word": "surprising",
+      "start": 0.75,
+      "end": 1.2875,
+      "confidence": 1.0
+    },
+    {
+      "word": "fact",
+      "start": 1.3,
+      "end": 1.6,
+      "confidence": 1.0
+    },
+    {
+      "word": "you've",
+      "start": 1.6125,
+      "end": 1.7625,
+      "confidence": 1.0
+    },
+    {
+      "word": "learned",
+      "start": 1.775,
+      "end": 2.0,
+      "confidence": 1.0
+    },
+    {
+      "word": "recently",
+      "start": 2.0125,
+      "end": 2.5625,
+      "confidence": 1.0
+    }
+  ]
+}

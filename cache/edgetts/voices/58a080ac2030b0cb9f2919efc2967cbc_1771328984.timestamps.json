@@ -1,0 +1,52 @@
+{
+  "word_timestamps": [
+    {
+      "word": "This",
+      "start": 0.1,
+      "end": 0.3375,
+      "confidence": 1.0
+    },
+    {
+      "word": "is",
+      "start": 0.3625,
+      "end": 0.475,
+      "confidence": 1.0
+    },
+    {
+      "word": "a",
+      "start": 0.5,
+      "end": 0.5625,
+      "confidence": 1.0
+    },
+    {
+      "word": "test",
+      "start": 0.5875,
+      "end": 0.8625,
+      "confidence": 1.0
+    },
+    {
+      "word": "story",
+      "start": 0.8875,
+      "end": 1.2125,
+      "confidence": 1.0
+    },
+    {
+      "word": "about",
+      "start": 1.2375,
+      "end": 1.525,
+      "confidence": 1.0
+    },
+    {
+      "word": "interesting",
+      "start": 1.5375,
+      "end": 2.1,
+      "confidence": 1.0
+    },
+    {
+      "word": "facts",
+      "start": 2.125,
+      "end": 2.6625,
+      "confidence": 1.0
+    }
+  ]
+}

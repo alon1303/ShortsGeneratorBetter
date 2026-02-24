@@ -1,0 +1,130 @@
+{
+  "word_timestamps": [
+    {
+      "word": "I",
+      "start": 0.1,
+      "end": 0.2625,
+      "confidence": 1.0
+    },
+    {
+      "word": "refused",
+      "start": 0.275,
+      "end": 0.8375,
+      "confidence": 1.0
+    },
+    {
+      "word": "because",
+      "start": 0.85,
+      "end": 1.15,
+      "confidence": 1.0
+    },
+    {
+      "word": "I've",
+      "start": 1.1625,
+      "end": 1.3,
+      "confidence": 1.0
+    },
+    {
+      "word": "been",
+      "start": 1.3125,
+      "end": 1.4625,
+      "confidence": 1.0
+    },
+    {
+      "word": "saving",
+      "start": 1.475,
+      "end": 1.85,
+      "confidence": 1.0
+    },
+    {
+      "word": "this",
+      "start": 1.8625,
+      "end": 2.05,
+      "confidence": 1.0
+    },
+    {
+      "word": "money",
+      "start": 2.0625,
+      "end": 2.3375,
+      "confidence": 1.0
+    },
+    {
+      "word": "for",
+      "start": 2.35,
+      "end": 2.5375,
+      "confidence": 1.0
+    },
+    {
+      "word": "years",
+      "start": 2.55,
+      "end": 2.9,
+      "confidence": 1.0
+    },
+    {
+      "word": "from",
+      "start": 2.9125,
+      "end": 3.0625,
+      "confidence": 1.0
+    },
+    {
+      "word": "part-time",
+      "start": 3.075,
+      "end": 3.5875,
+      "confidence": 1.0
+    },
+    {
+      "word": "jobs",
+      "start": 3.6,
+      "end": 4.1,
+      "confidence": 1.0
+    },
+    {
+      "word": "and",
+      "start": 4.3625,
+      "end": 4.5,
+      "confidence": 1.0
+    },
+    {
+      "word": "I",
+      "start": 4.5125,
+      "end": 4.55,
+      "confidence": 1.0
+    },
+    {
+      "word": "need",
+      "start": 4.5625,
+      "end": 4.7875,
+      "confidence": 1.0
+    },
+    {
+      "word": "it",
+      "start": 4.8,
+      "end": 4.875,
+      "confidence": 1.0
+    },
+    {
+      "word": "for",
+      "start": 4.8875,
+      "end": 5.0125,
+      "confidence": 1.0
+    },
+    {
+      "word": "my",
+      "start": 5.025,
+      "end": 5.175,
+      "confidence": 1.0
+    },
+    {
+      "word": "education",
+      "start": 5.1875,
+      "end": 5.8125,
+      "confidence": 1.0
+    },
+    {
+      "word": "expenses",
+      "start": 5.825,
+      "end": 6.5875,
+      "confidence": 1.0
+    }
+  ]
+}

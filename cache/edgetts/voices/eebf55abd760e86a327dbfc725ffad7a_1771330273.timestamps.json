@@ -1,0 +1,46 @@
+{
+  "word_timestamps": [
+    {
+      "word": "What's",
+      "start": 0.1,
+      "end": 0.4,
+      "confidence": 1.0
+    },
+    {
+      "word": "the",
+      "start": 0.425,
+      "end": 0.525,
+      "confidence": 1.0
+    },
+    {
+      "word": "most",
+      "start": 0.5375,
+      "end": 0.825,
+      "confidence": 1.0
+    },
+    {
+      "word": "unbelievable",
+      "start": 0.8375,
+      "end": 1.55,
+      "confidence": 1.0
+    },
+    {
+      "word": "fact",
+      "start": 1.575,
+      "end": 1.8875,
+      "confidence": 1.0
+    },
+    {
+      "word": "you",
+      "start": 1.9,
+      "end": 1.9875,
+      "confidence": 1.0
+    },
+    {
+      "word": "know",
+      "start": 2.0,
+      "end": 2.325,
+      "confidence": 1.0
+    }
+  ]
+}

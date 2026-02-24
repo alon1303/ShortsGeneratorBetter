@@ -307,7 +307,8 @@ class StoryProcessor:
             f"({story.word_count} words, {story.estimated_duration:.1f}s)"
         )
         
-        text = story.text
+        # Prepend title with a period for natural pause
+        text = f"{story.title}.\n\n{story.text}"
         original_length = len(text)
         
         # Step 1: Initial segmentation based on strategy

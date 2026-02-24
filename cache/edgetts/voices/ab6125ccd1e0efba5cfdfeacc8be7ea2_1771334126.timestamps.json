@@ -1,0 +1,142 @@
+{
+  "word_timestamps": [
+    {
+      "word": "I'm",
+      "start": 0.1,
+      "end": 0.3375,
+      "confidence": 1.0
+    },
+    {
+      "word": "19F",
+      "start": 0.35,
+      "end": 1.15,
+      "confidence": 1.0
+    },
+    {
+      "word": "currently",
+      "start": 1.2875,
+      "end": 1.6875,
+      "confidence": 1.0
+    },
+    {
+      "word": "in",
+      "start": 1.7,
+      "end": 1.825,
+      "confidence": 1.0
+    },
+    {
+      "word": "college",
+      "start": 1.8375,
+      "end": 2.4375,
+      "confidence": 1.0
+    },
+    {
+      "word": "My",
+      "start": 3.3,
+      "end": 3.4875,
+      "confidence": 1.0
+    },
+    {
+      "word": "mom",
+      "start": 3.5,
+      "end": 3.825,
+      "confidence": 1.0
+    },
+    {
+      "word": "recently",
+      "start": 3.8375,
+      "end": 4.3125,
+      "confidence": 1.0
+    },
+    {
+      "word": "asked",
+      "start": 4.325,
+      "end": 4.6125,
+      "confidence": 1.0
+    },
+    {
+      "word": "me",
+      "start": 4.625,
+      "end": 4.725,
+      "confidence": 1.0
+    },
+    {
+      "word": "to",
+      "start": 4.7375,
+      "end": 4.8375,
+      "confidence": 1.0
+    },
+    {
+      "word": "give",
+      "start": 4.85,
+      "end": 5.025,
+      "confidence": 1.0
+    },
+    {
+      "word": "her",
+      "start": 5.0375,
+      "end": 5.1375,
+      "confidence": 1.0
+    },
+    {
+      "word": "my",
+      "start": 5.15,
+      "end": 5.3125,
+      "confidence": 1.0
+    },
+    {
+      "word": "entire",
+      "start": 5.325,
+      "end": 5.8125,
+      "confidence": 1.0
+    },
+    {
+      "word": "savings",
+      "start": 5.825,
+      "end": 6.3,
+      "confidence": 1.0
+    },
+    {
+      "word": "of",
+      "start": 6.3125,
+      "end": 6.4,
+      "confidence": 1.0
+    },
+    {
+      "word": "$5000",
+      "start": 6.4125,
+      "end": 7.5625,
+      "confidence": 1.0
+    },
+    {
+      "word": "to",
+      "start": 7.575,
+      "end": 7.6625,
+      "confidence": 1.0
+    },
+    {
+      "word": "help",
+      "start": 7.675,
+      "end": 7.9125,
+      "confidence": 1.0
+    },
+    {
+      "word": "with",
+      "start": 7.925,
+      "end": 8.025,
+      "confidence": 1.0
+    },
+    {
+      "word": "household",
+      "start": 8.0375,
+      "end": 8.55,
+      "confidence": 1.0
+    },
+    {
+      "word": "bills",
+      "start": 8.5625,
+      "end": 9.0625,
+      "confidence": 1.0
+    }
+  ]
+}

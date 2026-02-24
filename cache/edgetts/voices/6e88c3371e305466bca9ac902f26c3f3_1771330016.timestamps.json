@@ -1,0 +1,214 @@
+{
+  "word_timestamps": [
+    {
+      "word": "This",
+      "start": 0.1,
+      "end": 0.3375,
+      "confidence": 1.0
+    },
+    {
+      "word": "is",
+      "start": 0.3625,
+      "end": 0.475,
+      "confidence": 1.0
+    },
+    {
+      "word": "a",
+      "start": 0.5,
+      "end": 0.5625,
+      "confidence": 1.0
+    },
+    {
+      "word": "test",
+      "start": 0.5875,
+      "end": 0.8625,
+      "confidence": 1.0
+    },
+    {
+      "word": "story",
+      "start": 0.8875,
+      "end": 1.2125,
+      "confidence": 1.0
+    },
+    {
+      "word": "about",
+      "start": 1.2375,
+      "end": 1.525,
+      "confidence": 1.0
+    },
+    {
+      "word": "interesting",
+      "start": 1.5375,
+      "end": 2.1,
+      "confidence": 1.0
+    },
+    {
+      "word": "facts",
+      "start": 2.125,
+      "end": 2.6625,
+      "confidence": 1.0
+    },
+    {
+      "word": "Did",
+      "start": 3.5375,
+      "end": 3.725,
+      "confidence": 1.0
+    },
+    {
+      "word": "you",
+      "start": 3.7375,
+      "end": 3.8625,
+      "confidence": 1.0
+    },
+    {
+      "word": "know",
+      "start": 3.8875,
+      "end": 4.05,
+      "confidence": 1.0
+    },
+    {
+      "word": "that",
+      "start": 4.0625,
+      "end": 4.2375,
+      "confidence": 1.0
+    },
+    {
+      "word": "honey",
+      "start": 4.2625,
+      "end": 4.5625,
+      "confidence": 1.0
+    },
+    {
+      "word": "never",
+      "start": 4.5875,
+      "end": 4.8625,
+      "confidence": 1.0
+    },
+    {
+      "word": "spoils",
+      "start": 4.8875,
+      "end": 5.4875,
+      "confidence": 1.0
+    },
+    {
+      "word": "Archaeologists",
+      "start": 6.375,
+      "end": 7.2125,
+      "confidence": 1.0
+    },
+    {
+      "word": "have",
+      "start": 7.2375,
+      "end": 7.375,
+      "confidence": 1.0
+    },
+    {
+      "word": "found",
+      "start": 7.4,
+      "end": 7.6625,
+      "confidence": 1.0
+    },
+    {
+      "word": "pots",
+      "start": 7.675,
+      "end": 7.95,
+      "confidence": 1.0
+    },
+    {
+      "word": "of",
+      "start": 7.9625,
+      "end": 8.05,
+      "confidence": 1.0
+    },
+    {
+      "word": "honey",
+      "start": 8.075,
+      "end": 8.3375,
+      "confidence": 1.0
+    },
+    {
+      "word": "in",
+      "start": 8.3625,
+      "end": 8.475,
+      "confidence": 1.0
+    },
+    {
+      "word": "ancient",
+      "start": 8.5,
+      "end": 8.8,
+      "confidence": 1.0
+    },
+    {
+      "word": "Egyptian",
+      "start": 8.825,
+      "end": 9.2875,
+      "confidence": 1.0
+    },
+    {
+      "word": "tombs",
+      "start": 9.3125,
+      "end": 9.625,
+      "confidence": 1.0
+    },
+    {
+      "word": "that",
+      "start": 9.65,
+      "end": 9.775,
+      "confidence": 1.0
+    },
+    {
+      "word": "are",
+      "start": 9.8,
+      "end": 9.9125,
+      "confidence": 1.0
+    },
+    {
+      "word": "over",
+      "start": 9.9375,
+      "end": 10.15,
+      "confidence": 1.0
+    },
+    {
+      "word": "3,000 years old",
+      "start": 10.175,
+      "end": 11.375,
+      "confidence": 1.0
+    },
+    {
+      "word": "and",
+      "start": 11.4,
+      "end": 11.525,
+      "confidence": 1.0
+    },
+    {
+      "word": "still",
+      "start": 11.55,
+      "end": 11.825,
+      "confidence": 1.0
+    },
+    {
+      "word": "perfectly",
+      "start": 11.8375,
+      "end": 12.325,
+      "confidence": 1.0
+    },
+    {
+      "word": "good",
+      "start": 12.35,
+      "end": 12.5,
+      "confidence": 1.0
+    },
+    {
+      "word": "to",
+      "start": 12.525,
+      "end": 12.625,
+      "confidence": 1.0
+    },
+    {
+      "word": "eat",
+      "start": 12.65,
+      "end": 12.95,
+      "confidence": 1.0
+    }
+  ]
+}

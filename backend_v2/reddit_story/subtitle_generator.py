@@ -727,6 +727,94 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         """
         return self.generate_ass_with_pysubs2(word_timestamps, audio_duration, output_path)
     
+    def filter_and_adjust_timestamps(
+        self,
+        word_timestamps: List[WordTimestamp],
+        title_word_count: int
+    ) -> Tuple[List[WordTimestamp], float]:
+        """
+        Filter out title words and adjust story timestamps to start at 0.
+        
+        Args:
+            word_timestamps: List of word timestamps for combined title+story audio
+            title_word_count: Number of words in the title (to filter out)
+            
+        Returns:
+            Tuple of (adjusted_story_timestamps, title_duration)
+        """
+        if title_word_count <= 0 or title_word_count >= len(word_timestamps):
+            logger.warning(f"Invalid title_word_count {title_word_count}, total words {len(word_timestamps)}. Returning original timestamps.")
+            return word_timestamps, 0.0
+        
+        # Get title duration (end time of last title word)
+        last_title_word = word_timestamps[title_word_count - 1]
+        title_duration = last_title_word.end
+        
+        logger.info(f"Filtering {title_word_count} title words, title duration: {title_duration:.3f}s")
+        
+        # Extract story-only timestamps
+        story_word_timestamps = word_timestamps[title_word_count:]
+        
+        # Adjust timestamps so story starts at 0
+        adjusted_story_timestamps = []
+        for ts in story_word_timestamps:
+            adjusted_ts = WordTimestamp(
+                word=ts.word,
+                start=ts.start - title_duration,
+                end=ts.end - title_duration,
+                confidence=ts.confidence
+            )
+            adjusted_story_timestamps.append(adjusted_ts)
+        
+        logger.info(f"Filtered to {len(adjusted_story_timestamps)} story words, first word at {adjusted_story_timestamps[0].start:.3f}s")
+        
+        return adjusted_story_timestamps, title_duration
+    
+    def generate_ass_with_title_filter(
+        self,
+        word_timestamps: List[WordTimestamp],
+        title_word_count: int,
+        audio_duration: float,
+        output_path: Path
+    ) -> Tuple[bool, float]:
+        """
+        Generate ASS subtitles for story only, filtering out title words.
+        
+        Args:
+            word_timestamps: List of word timestamps for combined title+story audio
+            title_word_count: Number of words in the title (to filter out)
+            audio_duration: Total audio duration (including title)
+            output_path: Path to save ASS file
+            
+        Returns:
+            Tuple of (success, title_duration)
+        """
+        try:
+            # Filter title words and adjust timestamps
+            story_timestamps, title_duration = self.filter_and_adjust_timestamps(
+                word_timestamps, title_word_count
+            )
+            
+            # Calculate story duration
+            story_duration = audio_duration - title_duration
+            if story_duration <= 0:
+                logger.error(f"Invalid story duration: {story_duration:.3f}s (audio: {audio_duration:.3f}s, title: {title_duration:.3f}s)")
+                return False, title_duration
+            
+            # Generate subtitles for story only
+            success = self.generate_ass_with_pysubs2(
+                story_timestamps, story_duration, output_path
+            )
+            
+            if success:
+                logger.info(f"Generated ASS with title filter: {output_path}, title duration: {title_duration:.3f}s")
+            
+            return success, title_duration
+            
+        except Exception as e:
+            logger.error(f"Failed to generate ASS with title filter: {e}")
+            return False, 0.0
+    
     def generate_ass_from_text(
         self,
         text: str,
