@@ -16,7 +16,8 @@ from .background_manager import BackgroundManager
 from .elevenlabs_client import AudioChunk, WordTimestamp
 from .subtitle_generator import SubtitleGenerator, generate_subtitles
 from .audio_utils import analyze_audio_for_offset, adjust_word_timestamps, detect_silence_at_beginning
-from .image_generator import TitlePopupTimingCalculator
+from .image_generator_new import TitlePopupTimingCalculator, RedditImageGenerator
+from .audio_mixer import AudioMixer
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ class VideoComposer:
             background_manager: Optional BackgroundManager instance
         """
         self.background_manager = background_manager or BackgroundManager()
+        self.audio_mixer = AudioMixer()
         
         logger.info("VideoComposer initialized")
     
@@ -302,31 +304,27 @@ class VideoComposer:
                 else:
                     current_video_path = hook_video_path
             
-            # Step 3: Mix audio with pop SFX if provided
+            # Step 3: Mix audio with pop SFX if provided (using AudioMixer)
             current_audio_path = audio_temp
             if pop_sfx_temp and pop_sfx_temp.exists():
-                mixed_audio_path = temp_path / "audio_mixed.mp3"
+                logger.info(f"Mixing pop SFX with audio using AudioMixer: {pop_sfx_temp.name}")
                 
-                # Mix pop SFX with main audio
-                mix_cmd = [
-                    'ffmpeg',
-                    '-y',
-                    '-i', audio_temp.name,
-                    '-i', pop_sfx_temp.name,
-                    '-filter_complex', 'amix=inputs=2:duration=first:dropout_transition=0',
-                    '-c:a', 'libmp3lame',
-                    '-b:a', '128k',
-                    mixed_audio_path.name
-                ]
+                # Use AudioMixer for precise mixing
+                mixed_audio_path = self.audio_mixer.mix_title_with_pop_sfx(
+                    main_audio_path=audio_temp,
+                    pop_sfx_path=pop_sfx_temp,
+                    pop_start_time=0.0,  # Pop at the very beginning
+                    pop_volume_delta=-6.0,  # Quieter pop sound
+                    output_path=temp_path / "audio_mixed.mp3"
+                )
                 
-                logger.info(f"Mixing pop SFX with audio: {pop_sfx_temp.name}")
-                result = subprocess.run(mix_cmd, capture_output=True, text=True, cwd=temp_path)
-                if result.returncode != 0:
-                    logger.error(f"Failed to mix audio: {result.stderr}")
+                if mixed_audio_path and mixed_audio_path.exists():
+                    current_audio_path = mixed_audio_path
+                    logger.info(f"Audio mixed successfully: {mixed_audio_path}")
+                else:
+                    logger.error("Failed to mix audio with AudioMixer")
                     # Continue without pop SFX
                     logger.warning("Continuing without pop SFX")
-                else:
-                    current_audio_path = mixed_audio_path
             
             # Step 4: Final assembly with subtitles
             logger.info(f"Final assembly: {current_video_path.name} + {current_audio_path.name}")

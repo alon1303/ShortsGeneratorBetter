@@ -446,18 +446,20 @@ async def process_reddit_story_background(job_id: str, request: RedditStoryReque
         _jobs[job_id]["message"] = "Generating title card..."
         _jobs[job_id]["progress"] = 0.45
         
-        # Import title card generator
-        from reddit_story.image_generator import RedditImageGenerator, TitlePopupTimingCalculator
+        # Import title card generator - using new Playwright-based generator
+        from reddit_story.image_generator_new import RedditImageGenerator, TitlePopupTimingCalculator
         
-        # Generate title card using HTML-to-Image generator
+        # Generate title card using Playwright HTML-to-Image generator with transparent background
         title_card_generator = RedditImageGenerator()
         title_card_path = post_output_dir / "title_card.png"
         
-        output_path = title_card_generator.generate_reddit_post_image(
+        # Call async method directly since we're already in an async context
+        output_path = await title_card_generator.generate_reddit_post_image(
             title=story.title,
             subreddit=story.subreddit,
             score=story.score,
             author=story.author,
+            theme_mode="dark",  # Use dark theme for better contrast
             output_path=title_card_path
         )
         success = output_path is not None

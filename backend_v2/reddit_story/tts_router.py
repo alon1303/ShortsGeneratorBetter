@@ -448,7 +448,7 @@ async def generate_title_and_story_audio(
             logger.info(f"Audio concatenated successfully: {final_audio_path} ({final_audio_path.stat().st_size} bytes)")
             
             # Calculate timing data
-            from .image_generator import TitlePopupTimingCalculator
+            from .image_generator_new import TitlePopupTimingCalculator
             timing_calc = TitlePopupTimingCalculator(
                 title_audio_duration=title_duration,
                 buffer_seconds=buffer_seconds
