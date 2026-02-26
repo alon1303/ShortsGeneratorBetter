@@ -45,7 +45,8 @@ def generate_mock_title_card() -> Path:
         "flair": "SERIOUS",
         "comments": 850,
         "theme_mode": "dark",
-        "body": "I (28F) have been saving up for a down payment on a house for the past 5 years. My mom found out about my savings and demanded I give it to her to pay off her credit card debt. I refused, and now she's telling the whole family I'm selfish and ungrateful."
+        "body": ""
+        
     }
     
     # Generate the image

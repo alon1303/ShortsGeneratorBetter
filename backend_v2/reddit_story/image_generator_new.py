@@ -439,33 +439,11 @@ class TitlePopupTimingCalculator:
         )
     
     def get_ffmpeg_filter_for_animation(self, image_path: Path) -> str:
-        """
-        Generate FFmpeg filter for pop-in animation with scale from 0% to 80% over pop_in_duration.
-        
-        Args:
-            image_path: Path to title card image
-            
-        Returns:
-            FFmpeg filter_complex string for pop-in animation
-        """
         # Fixed target width of 900px (90px margins on 1080px canvas)
         TARGET_W = 900
         
-        # Dynamic width animation: grow from 0 to 900px over pop_in_duration
-        dynamic_w = (
-            f"if(between(t,{self.card_start_time},{self.card_full_visible_time}), "
-            f"{TARGET_W}*((t-{self.card_start_time})/{self.pop_in_duration}), {TARGET_W})"
-        )
-        
-        # Dynamic height animation: maintain aspect ratio (ih/iw)
-        dynamic_h = (
-            f"if(between(t,{self.card_start_time},{self.card_full_visible_time}), "
-            f"(ih/iw)*{TARGET_W}*((t-{self.card_start_time})/{self.pop_in_duration}), "
-            f"(ih/iw)*{TARGET_W})"
-        )
-        
         filter_str = (
-            f"[1:v]scale=w='{dynamic_w}':h='{dynamic_h}':eval=frame[overlay_scaled];"
+            f"[1:v]scale={TARGET_W}:-1[overlay_scaled];"
             f"[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:"
             f"enable='between(t,{self.card_start_time},{self.card_end_time})'"
         )
