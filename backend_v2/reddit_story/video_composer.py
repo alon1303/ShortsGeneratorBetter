@@ -44,7 +44,8 @@ class VideoComposer:
         output_path: Path,
         word_timestamps: Optional[List[WordTimestamp]] = None,
         audio_path: Optional[Path] = None,
-        title_offset: float = 0.0
+        title_offset: float = 0.0,
+        title_word_count: int = 0
     ) -> bool:
         """
         Create ASS subtitles for text with word-level highlighting.
@@ -57,6 +58,7 @@ class VideoComposer:
             word_timestamps: Optional list of WordTimestamp objects for precise word timing
             audio_path: Optional path to audio file for offset detection
             title_offset: Offset to apply to all subtitle timestamps (for title audio)
+            title_word_count: Number of title words to filter out from subtitles (if > 0)
             
         Returns:
             True if successful, raises exception otherwise
@@ -86,15 +88,27 @@ class VideoComposer:
             adjusted_word_timestamps = adjust_word_timestamps(adjusted_word_timestamps, title_offset)
         
         if adjusted_word_timestamps:
-            # Use precise word timestamps from ElevenLabs (with offset correction if needed)
-            success = generator.generate_ass_from_word_timestamps(
-                word_timestamps=adjusted_word_timestamps,
-                audio_duration=audio_duration + title_offset,  # Total duration includes title offset
-                output_path=output_path
-            )
-            if not success:
-                raise RuntimeError("Failed to generate subtitles from word timestamps")
-            return True
+            # If title_word_count is provided, filter out title words from subtitles
+            if title_word_count > 0:
+                success, _ = generator.generate_ass_with_title_filter(
+                    word_timestamps=adjusted_word_timestamps,
+                    title_word_count=title_word_count,
+                    audio_duration=audio_duration + title_offset,
+                    output_path=output_path
+                )
+                if not success:
+                    raise RuntimeError("Failed to generate subtitles with title filter")
+                return True
+            else:
+                # Use precise word timestamps from ElevenLabs (with offset correction if needed)
+                success = generator.generate_ass_from_word_timestamps(
+                    word_timestamps=adjusted_word_timestamps,
+                    audio_duration=audio_duration + title_offset,  # Total duration includes title offset
+                    output_path=output_path
+                )
+                if not success:
+                    raise RuntimeError("Failed to generate subtitles from word timestamps")
+                return True
         else:
             # Generate simulated timestamps from text
             # This will raise RuntimeError if it fails
@@ -450,11 +464,16 @@ class VideoComposer:
             subtitle_path = temp_path / "subtitles.ass"
             logger.info(f"Creating subtitles for text: {audio_chunk.text[:50]}...")
             
-            # Extract title offset from timing_data if available
+            # Extract title offset and title word count from timing_data if available
             title_offset = 0.0
-            if timing_data and 'subtitle_start_time' in timing_data:
-                title_offset = timing_data['subtitle_start_time']
-                logger.info(f"Using title offset from timing_data: {title_offset:.3f}s")
+            title_word_count = 0
+            if timing_data:
+                if 'subtitle_start_time' in timing_data:
+                    title_offset = timing_data['subtitle_start_time']
+                    logger.info(f"Using title offset from timing_data: {title_offset:.3f}s")
+                if 'title_word_count' in timing_data:
+                    title_word_count = timing_data['title_word_count']
+                    logger.info(f"Using title word count from timing_data: {title_word_count} words")
             
             # This will raise an exception if subtitle generation fails
             self.create_subtitles_for_text(
@@ -463,7 +482,8 @@ class VideoComposer:
                 output_path=subtitle_path,
                 word_timestamps=audio_chunk.word_timestamps,
                 audio_path=audio_chunk.audio_path,  # Pass audio path for offset detection
-                title_offset=title_offset  # Pass title offset for subtitle timing
+                title_offset=title_offset,  # Pass title offset for subtitle timing
+                title_word_count=title_word_count  # Pass title word count for filtering
             )
             
             # Step 3: Combine audio with background, subtitles, overlay, and pop SFX

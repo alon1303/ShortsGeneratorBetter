@@ -495,7 +495,7 @@ async def process_reddit_story_background(job_id: str, request: RedditStoryReque
             voice=request.voice_id,
             title_voice=request.voice_id,
             engine=settings.TTS_ENGINE.lower(),
-            buffer_seconds=0.2,
+            buffer_seconds=0.0,
         )
         
         _jobs[job_id]["message"] = f"Audio generated for {len(story_audio_chunks)} parts"

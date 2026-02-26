@@ -326,7 +326,7 @@ async def generate_title_and_story_audio(
     voice: Optional[str] = None,
     title_voice: Optional[str] = None,
     engine: Optional[str] = None,
-    buffer_seconds: float = 0.2,
+    buffer_seconds: float = 0.0,
     **kwargs,
 ) -> Tuple[Path, List[AudioChunk], float, Dict[str, Any]]:
     """
