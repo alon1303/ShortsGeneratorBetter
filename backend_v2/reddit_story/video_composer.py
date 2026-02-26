@@ -258,7 +258,7 @@ class VideoComposer:
                     else:
                         # Fallback to simple scale overlay
                         filter_complex = (
-                            f'[1:v]scale=w=0.8*iw:h=0.8*ih/sar:force_original_aspect_ratio=decrease[overlay_scaled];'
+                            f'[1:v]scale=900:-1[overlay_scaled];'
                             f'[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:enable=\'between(t,{card_start},{card_end})\''
                         )
                         logger.info(f"Using simple overlay timing: {card_start:.2f}s to {card_end:.2f}s")
@@ -274,7 +274,7 @@ class VideoComposer:
                         logger.info(f"Using default overlay timing: {card_start:.2f}s to {card_end:.2f}s")
                     
                     filter_complex = (
-                        f'[1:v]scale=w=0.8*iw:h=0.8*ih/sar:force_original_aspect_ratio=decrease[overlay_scaled];'
+                        f'[1:v]scale=900:-1[overlay_scaled];'
                         f'[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:enable=\'between(t,{card_start},{card_end})\''
                     )
                 

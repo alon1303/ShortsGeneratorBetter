@@ -103,33 +103,62 @@ def create_3s_preview_video(title_card_path: Path) -> Path:
     # Output video path
     output_path = Path.cwd() / "preview_output.mp4"
     
-    # FFmpeg command to create 3-second preview with overlay
-    # Steps:
+    # Get background video dimensions to decide if scaling is needed
+    try:
+        dim_cmd = [
+            'ffprobe',
+            '-v', 'error',
+            '-select_streams', 'v:0',
+            '-show_entries', 'stream=width,height',
+            '-of', 'csv=p=0',
+            str(background_path)
+        ]
+        dim_result = subprocess.run(dim_cmd, capture_output=True, text=True, check=True)
+        bg_width, bg_height = map(int, dim_result.stdout.strip().split(','))
+        logger.info(f"Background video dimensions: {bg_width}x{bg_height}")
+    except Exception as e:
+        logger.warning(f"Could not get background dimensions, assuming 1080x1920: {e}")
+        bg_width, bg_height = 1080, 1920
+    
+    # Build FFmpeg filter complex that exactly matches the real pipeline
     # 1. Trim background to exactly 3 seconds
-    # 2. Overlay title card at center for entire duration
-    # 3. Output without audio
+    # 2. Only scale/crop background if not already 1080x1920
+    # 3. Scale title card to exactly 80% (matching video_composer.py line 208)
+    # 4. Center overlay
+    
+    # Background processing chain
+    bg_filters = ['trim=duration=3', 'setpts=PTS-STARTPTS']
+    if bg_width != 1080 or bg_height != 1920:
+        logger.info(f"Background is not 1080x1920, scaling and cropping to fit")
+        bg_filters.extend([
+            'scale=1080:1920:force_original_aspect_ratio=increase',
+            'crop=1080:1920'
+        ])
+    else:
+        logger.info("Background is already 1080x1920, using as-is")
+    
+    bg_filter_chain = ','.join(bg_filters)
+    
+    # Title card scaling - fixed width of 900px with proportional height
+    title_scale = 'scale=900:-1'
+    
+    # Full filter_complex
+    filter_complex = (
+        f'[0:v]{bg_filter_chain}[bg];'
+        f'[1:v]{title_scale}[overlay_scaled];'
+        f'[bg][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:enable=\'between(t,0,3)\'[v]'
+    )
     
     # Build FFmpeg command as list of strings (best practice per .clinerules)
-    # This mimics the real pipeline's TitlePopupTimingCalculator logic:
-    # 1. Force background to exactly 1080x1920 canvas (crop if needed)
-    # 2. Scale title card to exactly 80% of its original size (matching real pipeline's scaling formula)
-    # 3. Center overlay on the canvas
     cmd = [
         'ffmpeg',
         '-y',  # Overwrite output file without asking
         '-i', str(background_path),  # Background video input
         '-i', str(title_card_path),  # Title card image input
-        '-filter_complex', (
-            '[0:v]trim=duration=3,setpts=PTS-STARTPTS,'  # Trim background to 3 seconds
-            'scale=1080:1920:force_original_aspect_ratio=increase,'  # Force to 1080x1920, crop if needed
-            'crop=1080:1920[bg];'  # Ensure exact 1080x1920 canvas
-            '[1:v]scale=w=0.8*iw:h=0.8*ih/sar:force_original_aspect_ratio=decrease[overlay_scaled];'  # Exact scaling from real pipeline (video_composer.py line 208)
-            '[bg][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:enable=\'between(t,0,3)\'[v]'  # Center overlay
-        ),
+        '-filter_complex', filter_complex,
         '-map', '[v]',  # Map video output
         '-an',  # No audio
         '-t', '3',  # Ensure output is exactly 3 seconds
-        '-s', '1080x1920',  # Explicitly set output resolution
         '-c:v', 'libx264',
         '-preset', 'veryfast',
         '-crf', '23',
@@ -139,6 +168,7 @@ def create_3s_preview_video(title_card_path: Path) -> Path:
     
     logger.info(f"Running FFmpeg command to create preview: {output_path}")
     logger.debug(f"FFmpeg command: {' '.join(cmd)}")
+    logger.debug(f"Filter complex: {filter_complex}")
     
     try:
         # Execute FFmpeg command
@@ -153,6 +183,23 @@ def create_3s_preview_video(title_card_path: Path) -> Path:
         if output_path.exists() and output_path.stat().st_size > 0:
             logger.info(f"✅ Preview video created successfully: {output_path}")
             logger.info(f"   File size: {output_path.stat().st_size} bytes")
+            
+            # Verify output dimensions
+            try:
+                verify_cmd = [
+                    'ffprobe',
+                    '-v', 'error',
+                    '-select_streams', 'v:0',
+                    '-show_entries', 'stream=width,height',
+                    '-of', 'csv=p=0',
+                    str(output_path)
+                ]
+                verify_result = subprocess.run(verify_cmd, capture_output=True, text=True, check=True)
+                out_width, out_height = map(int, verify_result.stdout.strip().split(','))
+                logger.info(f"Output video dimensions: {out_width}x{out_height}")
+            except Exception as e:
+                logger.warning(f"Could not verify output dimensions: {e}")
+            
             return output_path
         else:
             logger.error("❌ Preview video file was not created")
