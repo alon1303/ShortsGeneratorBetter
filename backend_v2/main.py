@@ -447,19 +447,20 @@ async def process_reddit_story_background(job_id: str, request: RedditStoryReque
         _jobs[job_id]["progress"] = 0.45
         
         # Import title card generator
-        from reddit_story.image_generator import get_title_card_generator, TitlePopupTimingCalculator
+        from reddit_story.image_generator import RedditImageGenerator, TitlePopupTimingCalculator
         
-        # Generate title card
-        title_card_generator = get_title_card_generator(use_pillow=True)
+        # Generate title card using HTML-to-Image generator
+        title_card_generator = RedditImageGenerator()
         title_card_path = post_output_dir / "title_card.png"
         
-        success = title_card_generator.generate_title_card(
+        output_path = title_card_generator.generate_reddit_post_image(
             title=story.title,
-            output_path=title_card_path,
-            subreddit=f"r/{story.subreddit}",
-            upvotes=story.score,
-            time_ago="5 hours ago"
+            subreddit=story.subreddit,
+            score=story.score,
+            author=story.author,
+            output_path=title_card_path
         )
+        success = output_path is not None
         
         if not success or not title_card_path.exists():
             raise RuntimeError(f"Failed to generate title card: {title_card_path}")

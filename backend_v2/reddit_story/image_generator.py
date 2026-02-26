@@ -1,37 +1,18 @@
 """
 Reddit Image Generator for creating visual hooks.
 Generates light-mode Reddit post overlays for video intros.
-Includes two implementations:
-1. RedditTitleCardGenerator: Pillow-based with dynamic text wrapping (primary)
-2. RedditImageGenerator: HTML2Image-based with web rendering (fallback)
+Uses html2image for HTML-to-image rendering.
 """
 
 import logging
 import tempfile
 import re
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Optional, List
 import base64
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
-# Constants for Reddit title card
-TITLE_CARD_WIDTH = 800
-TITLE_CARD_HEIGHT = 400
-TITLE_FONT_SIZE = 36
-TITLE_FONT_COLOR = (34, 34, 34)  # Dark gray #222222
-TITLE_BG_COLOR = (255, 255, 255)  # White #FFFFFF
-TITLE_BORDER_COLOR = (237, 239, 241)  # Light gray #EDEFF1
-TITLE_TEXT_PADDING = 30
-MAX_TITLE_LINES = 4
-
-try:
-    from PIL import Image, ImageDraw, ImageFont
-    HAS_PILLOW = True
-except ImportError:
-    HAS_PILLOW = False
-    logger.warning("Pillow not available. Install with: pip install Pillow")
 
 try:
     from html2image import Html2Image
@@ -41,253 +22,8 @@ except ImportError:
     HTML2IMAGE_AVAILABLE = False
 
 
-class RedditTitleCardGenerator:
-    """Generates Reddit-style title cards with text wrapping using Pillow."""
-    
-    def __init__(
-        self,
-        template_path: Optional[Path] = None,
-        font_path: Optional[Path] = None
-    ):
-        """
-        Initialize title card generator.
-        
-        Args:
-            template_path: Path to base template image (optional)
-            font_path: Path to font file (optional, uses default if not provided)
-        """
-        if not HAS_PILLOW:
-            raise ImportError("Pillow is required for RedditTitleCardGenerator. Install with: pip install Pillow")
-        
-        self.template_path = template_path
-        self.font_path = font_path
-        
-        # Default font (will try to load system font if font_path not provided)
-        self.title_font = None
-        self.line_height = TITLE_FONT_SIZE + 10
-        
-        logger.info("RedditTitleCardGenerator initialized (Pillow-based)")
-    
-    def _load_font(self, font_size: int = TITLE_FONT_SIZE) -> Optional[ImageFont.FreeTypeFont]:
-        """Load font with fallback."""
-        try:
-            if self.font_path and self.font_path.exists():
-                font = ImageFont.truetype(str(self.font_path), font_size)
-                logger.debug(f"Loaded font from {self.font_path}")
-                return font
-            else:
-                # Try to load system font
-                font = ImageFont.truetype("arial.ttf", font_size)
-                logger.debug("Loaded system font 'arial.ttf'")
-                return font
-        except Exception as e:
-            logger.warning(f"Could not load font: {e}")
-            # Fall back to default font
-            try:
-                font = ImageFont.load_default()
-                logger.debug("Loaded default font")
-                return font
-            except:
-                return None
-    
-    def _wrap_text(self, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list:
-        """
-        Wrap text to fit within max_width.
-        
-        Args:
-            text: Text to wrap
-            font: PIL font object
-            max_width: Maximum width in pixels
-            
-        Returns:
-            List of text lines
-        """
-        if not text or not font:
-            return [text] if text else []
-        
-        words = text.split()
-        lines = []
-        current_line = []
-        
-        for word in words:
-            # Test if adding this word would exceed max width
-            test_line = ' '.join(current_line + [word])
-            # Estimate text width (PIL's textsize is deprecated, use textbbox)
-            try:
-                bbox = font.getbbox(test_line)
-                text_width = bbox[2] - bbox[0]
-            except:
-                # Fallback estimation
-                text_width = len(test_line) * (TITLE_FONT_SIZE // 2)
-            
-            if text_width <= max_width:
-                current_line.append(word)
-            else:
-                if current_line:
-                    lines.append(' '.join(current_line))
-                current_line = [word]
-                
-                # If a single word is too long, split it
-                if len(current_line) == 1:
-                    test_word = current_line[0]
-                    try:
-                        bbox = font.getbbox(test_word)
-                        word_width = bbox[2] - bbox[0]
-                    except:
-                        word_width = len(test_word) * (TITLE_FONT_SIZE // 2)
-                    
-                    if word_width > max_width:
-                        # Word is too long, need to split by characters
-                        chars = list(test_word)
-                        split_lines = []
-                        current_chars = []
-                        
-                        for char in chars:
-                            current_chars.append(char)
-                            test_chars = ''.join(current_chars)
-                            try:
-                                bbox = font.getbbox(test_chars)
-                                char_width = bbox[2] - bbox[0]
-                            except:
-                                char_width = len(test_chars) * (TITLE_FONT_SIZE // 2)
-                            
-                            if char_width > max_width:
-                                split_lines.append(''.join(current_chars[:-1]))
-                                current_chars = [char]
-                        
-                        if current_chars:
-                            split_lines.append(''.join(current_chars))
-                        
-                        if split_lines:
-                            # Add first split line to current line
-                            if lines and lines[-1] == ' '.join(current_line[:-1]):
-                                lines[-1] += ' ' + split_lines[0]
-                            else:
-                                lines.append(split_lines[0])
-                            # Add remaining splits as new lines
-                            lines.extend(split_lines[1:])
-                            current_line = []
-        
-        if current_line:
-            lines.append(' '.join(current_line))
-        
-        # Limit to maximum lines
-        if len(lines) > MAX_TITLE_LINES:
-            lines = lines[:MAX_TITLE_LINES]
-            lines[-1] = lines[-1][:50] + "..." if len(lines[-1]) > 50 else lines[-1]
-        
-        return lines
-    
-    def generate_title_card(
-        self,
-        title: str,
-        output_path: Path,
-        subreddit: str = "r/AskReddit",
-        upvotes: int = 1000,
-        time_ago: str = "5 hours ago"
-    ) -> bool:
-        """
-        Generate a Reddit-style title card image.
-        
-        Args:
-            title: Reddit post title
-            output_path: Path to save the generated image
-            subreddit: Subreddit name
-            upvotes: Number of upvotes
-            time_ago: Time posted
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            # Create a new image with Reddit light theme colors
-            image = Image.new('RGBA', (TITLE_CARD_WIDTH, TITLE_CARD_HEIGHT), (0, 0, 0, 0))
-            draw = ImageDraw.Draw(image)
-            
-            # Draw Reddit card background
-            card_rect = [
-                10, 10,  # Top-left
-                TITLE_CARD_WIDTH - 10, TITLE_CARD_HEIGHT - 10  # Bottom-right
-            ]
-            draw.rounded_rectangle(card_rect, radius=15, fill=TITLE_BG_COLOR, outline=TITLE_BORDER_COLOR, width=2)
-            
-            # Load fonts
-            title_font = self._load_font(TITLE_FONT_SIZE)
-            metadata_font = self._load_font(20)
-            
-            # Draw subreddit and metadata
-            metadata_y = 30
-            if metadata_font:
-                # Subreddit in bold (simulated with larger font)
-                subreddit_font = self._load_font(22)
-                if subreddit_font:
-                    draw.text((30, metadata_y), subreddit, font=subreddit_font, fill=(255, 69, 0))  # Reddit orange
-                    bbox = subreddit_font.getbbox(subreddit)
-                    subreddit_width = bbox[2] - bbox[0]
-                    
-                    # Upvotes and time
-                    metadata_text = f"• {upvotes:,} upvotes • {time_ago}"
-                    draw.text((30 + subreddit_width + 15, metadata_y), metadata_text, font=metadata_font, fill=(120, 124, 126))
-            
-            # Draw title with text wrapping
-            title_x = 30
-            title_y = 80
-            max_text_width = TITLE_CARD_WIDTH - 60  # 30px padding on each side
-            
-            if title_font:
-                lines = self._wrap_text(title, title_font, max_text_width)
-                
-                for i, line in enumerate(lines):
-                    if title_y + (i * self.line_height) > TITLE_CARD_HEIGHT - 50:
-                        break  # Don't go beyond card bottom
-                    
-                    draw.text(
-                        (title_x, title_y + (i * self.line_height)),
-                        line,
-                        font=title_font,
-                        fill=TITLE_FONT_COLOR
-                    )
-            
-            # Draw Reddit vote arrows (simplified)
-            vote_center_x = 50
-            vote_center_y = TITLE_CARD_HEIGHT // 2
-            
-            # Upvote arrow (orange)
-            draw.polygon([
-                (vote_center_x, vote_center_y - 15),
-                (vote_center_x - 10, vote_center_y),
-                (vote_center_x + 10, vote_center_y)
-            ], fill=(255, 69, 0))
-            
-            # Vote count
-            if metadata_font:
-                draw.text((vote_center_x - 10, vote_center_y + 15), str(upvotes), font=metadata_font, fill=(120, 124, 126))
-            
-            # Downvote arrow (gray)
-            draw.polygon([
-                (vote_center_x, vote_center_y + 35),
-                (vote_center_x - 10, vote_center_y + 20),
-                (vote_center_x + 10, vote_center_y + 20)
-            ], fill=(135, 138, 140))
-            
-            # Save image
-            image.save(output_path, 'PNG')
-            logger.info(f"Title card generated: {output_path}")
-            
-            # Log image details
-            logger.debug(f"Title: '{title[:50]}...'")
-            logger.debug(f"Image size: {TITLE_CARD_WIDTH}x{TITLE_CARD_HEIGHT}")
-            logger.debug(f"Lines: {len(lines) if 'lines' in locals() else 'N/A'}")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to generate title card: {e}")
-            return False
-
-
 class RedditImageGenerator:
-    """Generates Reddit post overlay images using html2image (legacy)."""
+    """Generates Reddit post overlay images using html2image."""
     
     def __init__(self, output_dir: Optional[Path] = None):
         """
@@ -309,7 +45,7 @@ class RedditImageGenerator:
             logger.info(f"RedditImageGenerator initialized with output directory: {self.output_dir}")
         else:
             self.hti = None
-            logger.warning("RedditImageGenerator initialized without html2image - will use fallback")
+            logger.warning("RedditImageGenerator initialized without html2image - will use text file fallback")
     
     def _generate_reddit_post_html(
         self,
@@ -586,26 +322,15 @@ class RedditImageGenerator:
                         os.unlink(html_file)
                         
             else:
-                # Fallback: Use Pillow-based generator if available
-                if HAS_PILLOW:
-                    logger.info("html2image not available, using Pillow-based generator instead")
-                    pillow_generator = RedditTitleCardGenerator()
-                    return pillow_generator.generate_title_card(
-                        title=title,
-                        output_path=output_path,
-                        subreddit=subreddit,
-                        upvotes=score,
-                        time_ago="5 hours ago"
-                    )
-                else:
-                    logger.warning("Neither html2image nor Pillow available, creating text file")
-                    return self._generate_text_file_fallback(
-                        title=title,
-                        subreddit=subreddit,
-                        score=score,
-                        author=author,
-                        output_path=output_path
-                    )
+                # html2image not available, create text file fallback
+                logger.warning("html2image not available, creating text file")
+                return self._generate_text_file_fallback(
+                    title=title,
+                    subreddit=subreddit,
+                    score=score,
+                    author=author,
+                    output_path=output_path
+                )
                 
         except Exception as e:
             logger.error(f"Failed to generate Reddit post image: {e}")
@@ -642,7 +367,7 @@ Subreddit: r/{subreddit}
 Upvotes: {score}
 Author: {author or 'Anonymous'}
 
-Note: Install Pillow for proper image generation: pip install Pillow
+Note: Install html2image for proper image generation: pip install html2image
 """
         
         with open(output_path, 'w', encoding='utf-8') as f:
@@ -755,28 +480,6 @@ class TitlePopupTimingCalculator:
         }
 
 
-# Factory function for getting the appropriate generator
-def get_title_card_generator(use_pillow: bool = True) -> RedditTitleCardGenerator:
-    """
-    Get a title card generator instance.
-    
-    Args:
-        use_pillow: If True, use Pillow-based generator (recommended)
-        
-    Returns:
-        RedditTitleCardGenerator instance
-        
-    Raises:
-        ImportError: If Pillow is not installed and use_pillow=True
-    """
-    if use_pillow:
-        if not HAS_PILLOW:
-            raise ImportError("Pillow is required for title card generation. Install with: pip install Pillow")
-        return RedditTitleCardGenerator()
-    else:
-        return RedditImageGenerator()
-
-
 # Example usage
 if __name__ == "__main__":
     import sys
@@ -784,42 +487,18 @@ if __name__ == "__main__":
     # Configure logging
     logging.basicConfig(level=logging.INFO)
     
-    # Test Pillow-based generator
-    if HAS_PILLOW:
-        print("Testing Pillow-based RedditTitleCardGenerator...")
-        pillow_generator = RedditTitleCardGenerator()
-        
-        test_output = Path(tempfile.gettempdir()) / "test_title_card.png"
-        success = pillow_generator.generate_title_card(
-            title="What's the most unexpectedly wholesome thing you've witnessed?",
-            output_path=test_output,
-            subreddit="r/AskReddit",
-            upvotes=45200,
-            time_ago="5 hours ago"
-        )
-        
-        if success and test_output.exists():
-            print(f"✅ Pillow title card generated: {test_output}")
-            print(f"   File size: {test_output.stat().st_size} bytes")
-            # Clean up
-            test_output.unlink()
-        else:
-            print("❌ Failed to generate Pillow title card")
-    else:
-        print("❌ Pillow not available for testing")
-    
     # Test html2image-based generator
-    print("\nTesting html2image-based RedditImageGenerator...")
+    print("Testing html2image-based RedditImageGenerator...")
     html_generator = RedditImageGenerator()
     
-    test_output2 = Path(tempfile.gettempdir()) / "test_html_image.png"
+    test_output = Path(tempfile.gettempdir()) / "test_html_image.png"
     result = html_generator.generate_reddit_post_image(
         title="Another test question for the community",
         subreddit="AskReddit",
         score=12500,
         author="TestUser123",
         flair="Serious",
-        output_path=test_output2
+        output_path=test_output
     )
     
     if result and result.exists():
@@ -837,5 +516,3 @@ if __name__ == "__main__":
     print(f"Timing data: {timing_data}")
     
     print("\nAll tests completed!")
-
-
