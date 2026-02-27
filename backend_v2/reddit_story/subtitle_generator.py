@@ -733,14 +733,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         title_word_count: int
     ) -> Tuple[List[WordTimestamp], float]:
         """
-        Filter out title words and adjust story timestamps to start at 0.
+        Filter out title words and return story timestamps with original absolute timestamps.
         
         Args:
             word_timestamps: List of word timestamps for combined title+story audio
             title_word_count: Number of words in the title (to filter out)
             
         Returns:
-            Tuple of (adjusted_story_timestamps, title_duration)
+            Tuple of (story_timestamps_with_original_absolute_times, title_duration)
         """
         if title_word_count <= 0 or title_word_count >= len(word_timestamps):
             logger.warning(f"Invalid title_word_count {title_word_count}, total words {len(word_timestamps)}. Returning original timestamps.")
@@ -752,23 +752,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         
         logger.info(f"Filtering {title_word_count} title words, title duration: {title_duration:.3f}s")
         
-        # Extract story-only timestamps
+        # Extract story-only timestamps (keep original absolute timestamps)
         story_word_timestamps = word_timestamps[title_word_count:]
         
-        # Adjust timestamps so story starts at 0
-        adjusted_story_timestamps = []
-        for ts in story_word_timestamps:
-            adjusted_ts = WordTimestamp(
-                word=ts.word,
-                start=ts.start - title_duration,
-                end=ts.end - title_duration,
-                confidence=ts.confidence
-            )
-            adjusted_story_timestamps.append(adjusted_ts)
+        logger.info(f"Filtered to {len(story_word_timestamps)} story words, first word at {story_word_timestamps[0].start:.3f}s")
         
-        logger.info(f"Filtered to {len(adjusted_story_timestamps)} story words, first word at {adjusted_story_timestamps[0].start:.3f}s")
-        
-        return adjusted_story_timestamps, title_duration
+        return story_word_timestamps, title_duration
     
     def generate_ass_with_title_filter(
         self,
@@ -795,19 +784,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 word_timestamps, title_word_count
             )
             
-            # Calculate story duration
+            # Calculate story duration for logging
             story_duration = audio_duration - title_duration
             if story_duration <= 0:
                 logger.error(f"Invalid story duration: {story_duration:.3f}s (audio: {audio_duration:.3f}s, title: {title_duration:.3f}s)")
                 return False, title_duration
             
-            # Generate subtitles for story only
+            # Generate subtitles for story only using full audio duration
+            # Story timestamps are absolute (starting at title_duration), so we need the full duration
             success = self.generate_ass_with_pysubs2(
-                story_timestamps, story_duration, output_path
+                story_timestamps, audio_duration, output_path
             )
             
             if success:
-                logger.info(f"Generated ASS with title filter: {output_path}, title duration: {title_duration:.3f}s")
+                logger.info(f"Generated ASS with title filter: {output_path}, title duration: {title_duration:.3f}s, story duration: {story_duration:.3f}s")
             
             return success, title_duration
             

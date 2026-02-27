@@ -82,14 +82,12 @@ class VideoComposer:
                 logger.info(f"Detected {silence_offset:.3f}s silence at beginning of audio, adjusting subtitles")
                 adjusted_word_timestamps = adjust_word_timestamps(word_timestamps, -silence_offset)
         
-        # Apply title offset if provided
-        if title_offset > 0 and adjusted_word_timestamps:
-            logger.info(f"Applying title offset: {title_offset:.3f}s")
-            adjusted_word_timestamps = adjust_word_timestamps(adjusted_word_timestamps, title_offset)
-        
         if adjusted_word_timestamps:
             # If title_word_count is provided, filter out title words from subtitles
             if title_word_count > 0:
+                # When using title filter, timestamps are already absolute and should NOT be shifted
+                # The title offset is already accounted for in the absolute timestamps
+                # So we skip applying title_offset adjustment for title_word_count > 0
                 success, _ = generator.generate_ass_with_title_filter(
                     word_timestamps=adjusted_word_timestamps,
                     title_word_count=title_word_count,
@@ -100,6 +98,11 @@ class VideoComposer:
                     raise RuntimeError("Failed to generate subtitles with title filter")
                 return True
             else:
+                # Apply title offset only when NOT using title filter (title_word_count <= 0)
+                if title_offset > 0 and adjusted_word_timestamps:
+                    logger.info(f"Applying title offset: {title_offset:.3f}s")
+                    adjusted_word_timestamps = adjust_word_timestamps(adjusted_word_timestamps, title_offset)
+                
                 # Use precise word timestamps from ElevenLabs (with offset correction if needed)
                 success = generator.generate_ass_from_word_timestamps(
                     word_timestamps=adjusted_word_timestamps,

@@ -1,0 +1,70 @@
+{
+  "word_timestamps": [
+    {
+      "word": "Am",
+      "start": 0.1,
+      "end": 0.2875,
+      "confidence": 1.0
+    },
+    {
+      "word": "I",
+      "start": 0.3125,
+      "end": 0.45,
+      "confidence": 1.0
+    },
+    {
+      "word": "the",
+      "start": 0.475,
+      "end": 0.6,
+      "confidence": 1.0
+    },
+    {
+      "word": "jerk",
+      "start": 0.6125,
+      "end": 1.0625,
+      "confidence": 1.0
+    },
+    {
+      "word": "Here",
+      "start": 1.9375,
+      "end": 2.2,
+      "confidence": 1.0
+    },
+    {
+      "word": "is",
+      "start": 2.225,
+      "end": 2.35,
+      "confidence": 1.0
+    },
+    {
+      "word": "what",
+      "start": 2.375,
+      "end": 2.5375,
+      "confidence": 1.0
+    },
+    {
+      "word": "happened",
+      "start": 2.5625,
+      "end": 2.9375,
+      "confidence": 1.0
+    },
+    {
+      "word": "to",
+      "start": 2.95,
+      "end": 3.0375,
+      "confidence": 1.0
+    },
+    {
+      "word": "me",
+      "start": 3.05,
+      "end": 3.2,
+      "confidence": 1.0
+    },
+    {
+      "word": "today",
+      "start": 3.225,
+      "end": 3.6625,
+      "confidence": 1.0
+    }
+  ]
+}
