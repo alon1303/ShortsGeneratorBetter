@@ -377,31 +377,27 @@ async def generate_title_and_story_audio(
             if len(copied_audio_files) < 2:
                 raise RuntimeError(f"Not enough valid audio files to concatenate: {len(copied_audio_files)}")
             
-            # Create file list for ffmpeg using forward slashes for Windows compatibility
-            filelist_path = temp_path / "concat_list.txt"
-            with open(filelist_path, 'w', encoding='utf-8') as f:
-                for audio_file in copied_audio_files:
-                    # Use forward slashes for Windows compatibility with ffmpeg
-                    # Convert Path to string and replace backslashes with forward slashes
-                    path_str = str(audio_file).replace('\\', '/')
-                    # Escape single quotes for ffmpeg concat format
-                    path_str = path_str.replace("'", "'\\''")
-                    f.write(f"file '{path_str}'\n")
-            
-            logger.debug(f"Created concat list at: {filelist_path}")
-            with open(filelist_path, 'r') as f:
-                logger.debug(f"Concat list contents:\n{f.read()}")
-            
-            # Concatenate audio files using ffmpeg
+            # Concatenate all audio files using ffmpeg filter_complex with proper re-encoding
             final_audio_path = temp_path / "final_audio.mp3"
+            
+            # Build filter_complex for concatenating all audio files
+            filter_complex_parts = []
+            input_args = []
+            
+            for i, audio_file in enumerate(copied_audio_files):
+                input_args.extend(['-i', str(audio_file)])
+                filter_complex_parts.append(f'[{i}:a]')
+            
+            filter_complex = ''.join(filter_complex_parts) + f'concat=n={len(copied_audio_files)}:v=0:a=1[out]'
             
             cmd = [
                 'ffmpeg',
                 '-y',
-                '-f', 'concat',
-                '-safe', '0',
-                '-i', str(filelist_path),
-                '-c', 'copy',  # Copy codec (no re-encoding)
+                *input_args,
+                '-filter_complex', filter_complex,
+                '-map', '[out]',
+                '-c:a', 'libmp3lame',
+                '-b:a', '128k',
                 str(final_audio_path)
             ]
             
@@ -449,23 +445,15 @@ async def generate_title_and_story_audio(
                 # Concatenate title audio with first chunk audio
                 combined_temp_path = temp_path / "combined_first_chunk.mp3"
                 
-                # Create concat list for title + first chunk
-                concat_list_path = temp_path / "title_first_concat.txt"
-                with open(concat_list_path, 'w', encoding='utf-8') as f:
-                    # Title audio path
-                    title_path_str = str(title_temp_path).replace('\\', '/').replace("'", "'\\''")
-                    f.write(f"file '{title_path_str}'\n")
-                    # First chunk audio path
-                    first_chunk_path_str = str(first_chunk.audio_path).replace('\\', '/').replace("'", "'\\''")
-                    f.write(f"file '{first_chunk_path_str}'\n")
-                
-                # Use ffmpeg to concatenate
+                # Use ffmpeg filter_complex to concatenate with proper re-encoding
                 concat_cmd = [
                     'ffmpeg', '-y',
-                    '-f', 'concat',
-                    '-safe', '0',
-                    '-i', str(concat_list_path),
-                    '-c', 'copy',
+                    '-i', str(title_temp_path),
+                    '-i', str(first_chunk.audio_path),
+                    '-filter_complex', '[0:a][1:a]concat=n=2:v=0:a=1[out]',
+                    '-map', '[out]',
+                    '-c:a', 'libmp3lame',
+                    '-b:a', '128k',
                     str(combined_temp_path)
                 ]
                 

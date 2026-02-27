@@ -263,22 +263,28 @@ class VideoComposer:
                     card_end = timing_data['card_end_time']
                     
                     # Check if we have enough data to use TitlePopupTimingCalculator for pop-in animation
-                    if ('title_audio_duration' in timing_data and 'buffer_seconds' in timing_data and 
+                    if ('title_audio_duration' in timing_data and 'buffer_seconds' in timing_data and
                         'pop_in_duration' in timing_data):
+                        # Apply a small visual gap to prevent overlap with subtitles
+                        visual_gap = 0.15
+                        adjusted_duration = max(0.5, timing_data['title_audio_duration'] - visual_gap)
+                        
                         # Create calculator for pop-in animation
                         calculator = TitlePopupTimingCalculator(
-                            title_audio_duration=timing_data['title_audio_duration'],
+                            title_audio_duration=adjusted_duration,
                             buffer_seconds=timing_data['buffer_seconds']
                         )
                         filter_complex = calculator.get_ffmpeg_filter_for_animation(overlay_temp)
                         logger.info(f"Using pop-in animation with timing: {card_start:.2f}s to {card_end:.2f}s")
                     else:
                         # Fallback to simple scale overlay
+                        visual_gap = 0.15
+                        adjusted_card_end = max(0.5, card_end - visual_gap)
                         filter_complex = (
                             f'[1:v]scale=900:-1[overlay_scaled];'
-                            f'[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:enable=\'between(t,{card_start},{card_end})\''
+                            f'[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:enable=\'between(t,{card_start},{adjusted_card_end})\''
                         )
-                        logger.info(f"Using simple overlay timing: {card_start:.2f}s to {card_end:.2f}s")
+                        logger.info(f"Using simple overlay timing: {card_start:.2f}s to {adjusted_card_end:.2f}s")
                 else:
                     # Use hook_duration if provided, otherwise default to 4 seconds
                     card_start = 0.0
