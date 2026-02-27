@@ -13,7 +13,7 @@ import uuid
 
 from config.settings import settings
 from .background_manager import BackgroundManager
-from .elevenlabs_client import AudioChunk, WordTimestamp
+from .models import AudioChunk, WordTimestamp
 from .subtitle_generator import SubtitleGenerator, generate_subtitles
 from .audio_utils import analyze_audio_for_offset, adjust_word_timestamps, detect_silence_at_beginning
 from .image_generator_new import TitlePopupTimingCalculator, RedditImageGenerator

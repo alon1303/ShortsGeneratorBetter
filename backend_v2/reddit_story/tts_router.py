@@ -1,6 +1,6 @@
 """
-TTS Router/Factory for selecting between Edge TTS and ElevenLabs TTS engines.
-Routes requests to the appropriate TTS client based on configuration.
+TTS Router/Factory for Edge TTS engine.
+Routes requests to the Edge TTS client.
 """
 
 import logging
@@ -9,7 +9,7 @@ from pathlib import Path
 from dataclasses import dataclass
 
 from config.settings import settings
-from .elevenlabs_client import ElevenLabsClient, WordTimestamp, AudioChunk
+from .models import WordTimestamp, AudioChunk
 from .edgetts_client import EdgeTTSClient
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict, Any
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TTSConfig:
     """Configuration for TTS engine selection."""
-    engine: str  # "edge" or "elevenlabs"
+    engine: str  # "edge"
     voice_id: Optional[str] = None
     cache_dir: Optional[Path] = None
     use_cache: bool = True
@@ -32,7 +32,7 @@ class TTSConfig:
     def from_settings(cls, voice_id: Optional[str] = None, cache_dir: Optional[Path] = None):
         """Create TTSConfig from application settings."""
         return cls(
-            engine=settings.TTS_ENGINE.lower(),
+            engine="edge",  # Only Edge TTS is supported
             voice_id=voice_id,
             cache_dir=cache_dir,
             use_cache=settings.ENABLE_CACHE
@@ -42,7 +42,7 @@ class TTSConfig:
 class TTSRouter:
     """
     Router that selects the appropriate TTS client based on configuration.
-    Provides a unified interface for both Edge TTS and ElevenLabs TTS.
+    Provides a unified interface for Edge TTS.
     """
     
     def __init__(self, config: Optional[TTSConfig] = None):
@@ -65,13 +65,8 @@ class TTSRouter:
                     voice=self.config.voice_id,
                     cache_dir=self.config.cache_dir
                 )
-            elif self.config.engine == "elevenlabs":
-                self._client = ElevenLabsClient(
-                    voice_id=self.config.voice_id,
-                    cache_dir=self.config.cache_dir
-                )
             else:
-                raise ValueError(f"Unknown TTS engine: {self.config.engine}. Use 'edge' or 'elevenlabs'")
+                raise ValueError(f"Unknown TTS engine: {self.config.engine}. Use 'edge' only")
         
         return self._client
     
@@ -111,13 +106,6 @@ class TTSRouter:
                 use_cache=self.config.use_cache,
                 **kwargs_without_use_cache,
             )
-        elif self.config.engine == "elevenlabs":
-            return await client.text_to_speech_with_timestamps(
-                text=text,
-                voice_id=voice,
-                use_cache=self.config.use_cache,
-                **kwargs_without_use_cache,
-            )
         else:
             raise ValueError(f"Unknown TTS engine: {self.config.engine}")
     
@@ -151,13 +139,6 @@ class TTSRouter:
             return await client.text_to_speech(
                 text=text,
                 voice=voice,
-                use_cache=self.config.use_cache,
-                **kwargs,
-            )
-        elif self.config.engine == "elevenlabs":
-            return await client.text_to_speech(
-                text=text,
-                voice_id=voice,
                 use_cache=self.config.use_cache,
                 **kwargs,
             )
@@ -198,13 +179,6 @@ class TTSRouter:
                 with_timestamps=with_timestamps,
                 **kwargs,
             )
-        elif self.config.engine == "elevenlabs":
-            return await client.generate_audio_chunks(
-                text_chunks=text_chunks,
-                voice_id=voice,
-                with_timestamps=with_timestamps,
-                **kwargs,
-            )
         else:
             raise ValueError(f"Unknown TTS engine: {self.config.engine}")
     
@@ -221,8 +195,6 @@ class TTSRouter:
     async def close(self):
         """Close the TTS client connection."""
         if self._client:
-            if self.config.engine == "elevenlabs":
-                await self._client.close()
             # EdgeTTS doesn't have persistent connections to close
             self._client = None
     
@@ -244,7 +216,7 @@ async def get_tts_client(
     Factory function to get a TTS router/client.
     
     Args:
-        engine: TTS engine ("edge" or "elevenlabs"), defaults to settings.TTS_ENGINE
+        engine: TTS engine ("edge"), defaults to settings.TTS_ENGINE
         voice: Voice ID to use
         cache_dir: Cache directory
         use_cache: Whether to use caching
@@ -277,7 +249,7 @@ async def generate_story_audio(
         text_chunks: List of text chunks to convert
         voice: Voice ID to use
         with_timestamps: Whether to request word-level timestamps
-        engine: Override TTS engine ("edge" or "elevenlabs")
+        engine: Override TTS engine ("edge")
         **kwargs: Additional arguments for TTSRouter
         
     Returns:
@@ -301,7 +273,7 @@ async def generate_story_audio_compat(
 ) -> List[AudioChunk]:
     """
     Backward compatibility wrapper for existing code.
-    Uses "voice_id" parameter name for ElevenLabs compatibility.
+    Uses "voice_id" parameter name for compatibility.
     
     Args:
         text_chunks: List of text chunks to convert
@@ -337,7 +309,7 @@ async def generate_title_and_story_audio(
         story_text_chunks: List of story text chunks
         voice: Voice ID for story narration (defaults to config)
         title_voice: Voice ID for title narration (defaults to voice if not provided)
-        engine: TTS engine ("edge" or "elevenlabs")
+        engine: TTS engine ("edge")
         buffer_seconds: Additional buffer after title audio ends
         **kwargs: Additional arguments for TTSRouter
         
@@ -469,24 +441,93 @@ async def generate_title_and_story_audio(
             
             # Copy concatenated audio to cache
             shutil.copy2(final_audio_path, final_cache_path)
-            
+
+            # Merge title audio into first story chunk for synchronization
+            if story_audio_chunks:
+                first_chunk = story_audio_chunks[0]
+                
+                # Concatenate title audio with first chunk audio
+                combined_temp_path = temp_path / "combined_first_chunk.mp3"
+                
+                # Create concat list for title + first chunk
+                concat_list_path = temp_path / "title_first_concat.txt"
+                with open(concat_list_path, 'w', encoding='utf-8') as f:
+                    # Title audio path
+                    title_path_str = str(title_temp_path).replace('\\', '/').replace("'", "'\\''")
+                    f.write(f"file '{title_path_str}'\n")
+                    # First chunk audio path
+                    first_chunk_path_str = str(first_chunk.audio_path).replace('\\', '/').replace("'", "'\\''")
+                    f.write(f"file '{first_chunk_path_str}'\n")
+                
+                # Use ffmpeg to concatenate
+                concat_cmd = [
+                    'ffmpeg', '-y',
+                    '-f', 'concat',
+                    '-safe', '0',
+                    '-i', str(concat_list_path),
+                    '-c', 'copy',
+                    str(combined_temp_path)
+                ]
+                
+                result = subprocess.run(concat_cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    logger.error(f"Title+first chunk concatenation failed: {result.stderr}")
+                    raise RuntimeError(f"Failed to concatenate title with first chunk: {result.stderr}")
+                
+                if not combined_temp_path.exists() or combined_temp_path.stat().st_size == 0:
+                    raise RuntimeError(f"Combined audio file not created: {combined_temp_path}")
+                
+                # Cache the combined audio
+                combined_cache_path = cache_dir / f"combined_first_chunk_{content_hash}.mp3"
+                shutil.copy2(combined_temp_path, combined_cache_path)
+                
+                # Get file size of combined audio
+                combined_file_size = combined_cache_path.stat().st_size
+                
+                # Adjust timestamps
+                combined_timestamps = []
+                
+                # Add title timestamps (if available)
+                if title_timestamps:
+                    combined_timestamps.extend(title_timestamps)
+                
+                # Add first chunk timestamps shifted by title duration
+                if first_chunk.word_timestamps:
+                    for ts in first_chunk.word_timestamps:
+                        shifted_ts = WordTimestamp(
+                            word=ts.word,
+                            start=ts.start + title_duration,
+                            end=ts.end + title_duration,
+                            confidence=ts.confidence
+                        )
+                        combined_timestamps.append(shifted_ts)
+                
+                # Update first chunk with combined audio and timestamps
+                first_chunk.audio_path = combined_cache_path
+                first_chunk.duration_seconds += title_duration
+                first_chunk.text = f"{title} {first_chunk.text}"
+                first_chunk.word_timestamps = combined_timestamps
+                first_chunk.file_size_bytes = combined_file_size
+                
+                logger.info(f"Merged title into first story chunk: {combined_cache_path} ({combined_file_size} bytes)")
+
             logger.info(f"Final audio cached: {final_cache_path}")
             logger.info(f"Title duration: {title_duration:.2f}s ({title_word_count} words), Story chunks: {len(story_audio_chunks)}")
-            
+
             return final_cache_path, story_audio_chunks, title_duration, timing_data
 
 
 # Test function
 async def test_tts_router():
-    """Test the TTS router with different engines."""
+    """Test the TTS router with Edge TTS engine."""
     import asyncio
     
     test_chunks = [
         "Hello, this is a test of the TTS router system.",
-        "This should work with either Edge TTS or ElevenLabs.",
+        "This should work with Edge TTS.",
     ]
     
-    # Test with Edge TTS (free)
+    # Test with Edge TTS
     print("Testing with Edge TTS engine...")
     async with await get_tts_client(engine="edge") as router:
         print(f"Using engine: {router.config.engine}")
@@ -502,17 +543,6 @@ async def test_tts_router():
         print(f"Generated {len(audio_chunks)} audio chunks")
         for i, chunk in enumerate(audio_chunks, 1):
             print(f"Chunk {i}: {chunk.duration_seconds:.1f}s, {len(chunk.word_timestamps or [])} word timestamps")
-    
-    # Test with ElevenLabs (if configured)
-    if settings.is_elevenlabs_configured():
-        print("\nTesting with ElevenLabs engine...")
-        async with await get_tts_client(engine="elevenlabs") as router:
-            print(f"Using engine: {router.config.engine}")
-            
-            voices = await router.get_available_voices()
-            print(f"Available voices: {len(voices)}")
-    else:
-        print("\nSkipping ElevenLabs test (not configured)")
     
     print("\nTesting factory function...")
     chunks = await generate_story_audio(

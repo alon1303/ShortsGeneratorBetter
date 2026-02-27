@@ -14,7 +14,7 @@ import logging
 sys.path.insert(0, str(Path(__file__).parent))
 
 from reddit_story.video_composer import VideoComposer
-from reddit_story.elevenlabs_client import AudioChunk
+from reddit_story.models import AudioChunk
 from reddit_story.background_manager import BackgroundManager
 
 # Configure logging

@@ -16,7 +16,7 @@ import uuid
 import edge_tts
 
 from config.settings import settings
-from .elevenlabs_client import WordTimestamp, AudioChunk
+from .models import WordTimestamp, AudioChunk
 
 # Configure logging
 logger = logging.getLogger(__name__)

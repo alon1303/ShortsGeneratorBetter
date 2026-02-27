@@ -756,51 +756,37 @@ async def get_reddit_story_themes():
 @app.get("/reddit-story/voices")
 async def get_reddit_story_voices():
     """
-    Get available voices for Reddit stories based on configured TTS engine.
+    Get available voices for Reddit stories using Edge TTS engine.
     
     Returns:
-        List of available voice IDs and names for the active TTS engine
+        List of available voice IDs and names for Edge TTS
     """
     try:
         from config.settings import settings
         
-        # Get voices based on configured TTS engine
+        # Get voices from Edge TTS
         async with await get_tts_client() as tts_client:
             voices = await tts_client.get_available_voices()
         
-        # Format voice information
+        # Format voice information for Edge TTS
         formatted_voices = []
         for voice in voices:
             formatted_voices.append({
-                "voice_id": voice.get("voice_id"),
-                "name": voice.get("name"),
-                "category": voice.get("category"),
-                "description": voice.get("description"),
-                "preview_url": voice.get("preview_url"),
-                "engine": settings.TTS_ENGINE.lower(),  # Include engine info
+                "voice_id": voice.get("voice_id", voice.get("ShortName", "")),
+                "name": voice.get("name", voice.get("FriendlyName", "")),
+                "category": voice.get("category", voice.get("Locale", "")),
+                "description": voice.get("description", f"Edge TTS voice: {voice.get('FriendlyName', 'Unknown')}"),
+                "preview_url": voice.get("preview_url", ""),
+                "engine": "edge",  # Only Edge TTS is supported
             })
         
-        # Add engine-specific messages
-        engine = settings.TTS_ENGINE.lower()
-        if engine == "edge":
-            message = f"Using Microsoft Edge TTS (free) with {len(formatted_voices)} available voices"
-        elif engine == "elevenlabs":
-            if not settings.is_elevenlabs_configured():
-                return {
-                    "success": False,
-                    "voices": [],
-                    "message": "ElevenLabs API not configured for selected engine",
-                    "error": "Set ELEVENLABS_API_KEY in .env file or switch to edge engine",
-                }
-            message = f"Using ElevenLabs TTS (paid) with {len(formatted_voices)} available voices"
-        else:
-            message = f"Using {engine} TTS engine with {len(formatted_voices)} available voices"
+        message = f"Using Microsoft Edge TTS (free) with {len(formatted_voices)} available voices"
         
         return {
             "success": True,
             "voices": formatted_voices,
             "total_voices": len(formatted_voices),
-            "engine": engine,
+            "engine": "edge",
             "message": message,
         }
     except Exception as e:
@@ -808,7 +794,7 @@ async def get_reddit_story_voices():
         return {
             "success": False,
             "voices": [],
-            "engine": settings.TTS_ENGINE.lower() if 'settings' in locals() else "unknown",
+            "engine": "edge",
             "error": str(e),
         }
 
