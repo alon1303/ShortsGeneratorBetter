@@ -306,12 +306,15 @@ class VideoComposer:
                     'ffmpeg',
                     '-y',
                     '-i', current_video_path.name,
+                    '-loop', '1',
+                    '-framerate', '30',
                     '-i', overlay_temp.name,
                     '-filter_complex', filter_complex,
                     '-c:v', 'libx264',
                     '-preset', 'veryfast',
                     '-crf', '23',
                     '-c:a', 'copy',  # Copy audio if exists
+                    '-shortest',
                     '-movflags', '+faststart',
                     hook_video_path.name
                 ]
