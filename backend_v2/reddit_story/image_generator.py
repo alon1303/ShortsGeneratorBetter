@@ -442,28 +442,16 @@ class TitlePopupTimingCalculator:
         )
     
     def get_ffmpeg_filter_for_animation(self, image_path: Path) -> str:
-        """
-        Generate FFmpeg filter for pop-in animation with scale from 0% to 80% over pop_in_duration.
+        # Target width is 900px. We calculate height maintaining aspect ratio (ih/iw).
+        # We scale from 1px to 900px over `pop_in_duration` seconds to create a pop-in effect.
         
-        Args:
-            image_path: Path to title card image
-            
-        Returns:
-            FFmpeg filter_complex string for pop-in animation
-        """
-        # Pop-in animation: scale from 0% to 80% over pop_in_duration
-        # Then remain at 80% scale until card_end_time
-        # Add :eval=frame to allow time variable 't' evaluation
         filter_str = (
-            f"[1:v]scale=w='if(between(t,{self.card_start_time},{self.card_full_visible_time}), "
-            f"0.8*((t-{self.card_start_time})/{self.pop_in_duration})*iw, 0.8*iw)':"
-            f"h='if(between(t,{self.card_start_time},{self.card_full_visible_time}), "
-            f"0.8*((t-{self.card_start_time})/{self.pop_in_duration})*ih, 0.8*ih)':"
-            f"force_original_aspect_ratio=decrease:eval=frame[overlay_scaled];"
+            f"[1:v]scale=w='max(1, min(900, 900*(t-{self.card_start_time})/{self.pop_in_duration}))':"
+            f"h='max(1, min(900*ih/iw, 900*ih/iw*(t-{self.card_start_time})/{self.pop_in_duration}))':"
+            f"eval=frame[overlay_scaled];"
             f"[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:"
             f"enable='between(t,{self.card_start_time},{self.card_end_time})'"
         )
-        
         return filter_str
     
     def to_dict(self) -> dict:

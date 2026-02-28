@@ -1,0 +1,28 @@
+{
+  "word_timestamps": [
+    {
+      "word": "Am",
+      "start": 0.1,
+      "end": 0.2875,
+      "confidence": 1.0
+    },
+    {
+      "word": "I",
+      "start": 0.3125,
+      "end": 0.45,
+      "confidence": 1.0
+    },
+    {
+      "word": "the",
+      "start": 0.475,
+      "end": 0.6,
+      "confidence": 1.0
+    },
+    {
+      "word": "jerk",
+      "start": 0.6125,
+      "end": 1.0625,
+      "confidence": 1.0
+    }
+  ]
+}

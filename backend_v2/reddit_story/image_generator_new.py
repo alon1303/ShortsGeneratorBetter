@@ -439,13 +439,41 @@ class TitlePopupTimingCalculator:
         )
     
     def get_ffmpeg_filter_for_animation(self, image_path: Path) -> str:
-        # Fixed target width of 900px (90px margins on 1080px canvas)
-        TARGET_W = 900
+        """
+        Generate FFmpeg filter_complex string for pop-in animation with alpha preservation.
         
+        Creates a scale animation that grows from 50px to 900px over pop_in_duration seconds,
+        then stays at full size until card_end_time, then disappears.
+        
+        Args:
+            image_path: Path to the overlay image (PNG with transparency)
+            
+        Returns:
+            FFmpeg filter_complex string for dynamic pop-in animation
+        """
+        TARGET_W = 900
+        MIN_W = 50  # Minimum width to avoid 0 height calculation
+        
+        # Calculate width: grow from MIN_W to TARGET_W over pop_in_duration seconds
+        # Use max(0, t - card_start_time) to avoid negative time values
+        # Use min(..., 1) to clamp growth factor between 0 and 1
+        width_expr = f"max({MIN_W}, {TARGET_W} * min(max(0, t-{self.card_start_time})/{self.pop_in_duration}, 1))"
+        
+        # Height: maintain aspect ratio automatically (FFmpeg will compute from width)
+        # Using h=-1 tells FFmpeg to maintain aspect ratio based on the calculated width
         filter_str = (
-            f"[1:v]scale={TARGET_W}:-1[overlay_scaled];"
+            f"[1:v]scale=w='{width_expr}':h=-1:eval=frame[overlay_scaled];"
             f"[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:"
             f"enable='between(t,{self.card_start_time},{self.card_end_time})'"
+        )
+        
+        logger.debug(
+            f"Generated pop-in animation filter: "
+            f"card_start={self.card_start_time:.2f}s, "
+            f"card_end={self.card_end_time:.2f}s, "
+            f"pop_in={self.pop_in_duration:.2f}s, "
+            f"target_width={TARGET_W}px, "
+            f"min_width={MIN_W}px"
         )
         
         return filter_str
