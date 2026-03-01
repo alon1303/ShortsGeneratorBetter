@@ -459,11 +459,11 @@ class TitlePopupTimingCalculator:
         # Use min(..., 1) to clamp growth factor between 0 and 1
         width_expr = f"max({MIN_W}, {TARGET_W} * min(max(0, t-{self.card_start_time})/{self.pop_in_duration}, 1))"
         
-        # Height: dynamic aspect ratio calculation that updates per frame
-        # Use w*ih/iw to calculate height based on current width and original image dimensions
-        # Multiplication without parentheses to avoid FFmpeg parsing as function call
+        # Height: use FFmpeg's native aspect ratio preservation
+        # With -loop 1 and -framerate 30, the image has a continuous timeline
+        # so h=-1 works correctly with eval=frame
         filter_str = (
-            f"[1:v]scale=w='{width_expr}':h='w*ih/iw':eval=frame[overlay_scaled];"
+            f"[1:v]scale=w='{width_expr}':h=-1:eval=frame[overlay_scaled];"
             f"[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:shortest=1:"
             f"enable='between(t,{self.card_start_time},{self.card_end_time})'"
         )
