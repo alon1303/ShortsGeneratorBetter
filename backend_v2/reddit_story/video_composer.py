@@ -178,11 +178,13 @@ class VideoComposer:
             bg_result = subprocess.run(bg_cmd, capture_output=True, text=True)
             bg_duration = float(bg_result.stdout.strip()) if bg_result.stdout else 0
             
-            if bg_duration < audio_duration:
-                logger.warning(f"Background ({bg_duration:.1f}s) is shorter than audio ({audio_duration:.1f}s)")
-                # We'll loop the background if needed
+            # Fix micro-second background duration bug
+            needs_loop = bg_duration < (audio_duration - 0.5)
+            if needs_loop:
                 loop_count = int(audio_duration / bg_duration) + 1
-                logger.info(f"Will loop background {loop_count} times")
+                logger.warning(f"Background ({bg_duration:.1f}s) is shorter than audio ({audio_duration:.1f}s), will loop {loop_count} times")
+            else:
+                logger.info(f"Background duration ({bg_duration:.1f}s) is sufficient for audio ({audio_duration:.1f}s)")
             
             # Create temporary directory for intermediate files
             import tempfile
@@ -224,40 +226,54 @@ class VideoComposer:
                 shutil.copy2(subtitle_path, subtitle_temp)
                 logger.debug(f"Copied subtitles: {subtitle_path} -> {subtitle_temp}")
             
-            # Step 1: Handle background looping if needed
-            current_video_path = background_temp
-            if bg_duration < audio_duration:
-                loop_count = int(audio_duration / bg_duration) + 1
-                looped_video_path = temp_path / "background_looped.mp4"
+            # Step 3: Mix audio with pop SFX if provided (using AudioMixer)
+            current_audio_path = audio_temp
+            if pop_sfx_temp and pop_sfx_temp.exists():
+                logger.info(f"Mixing pop SFX with audio using AudioMixer: {pop_sfx_temp.name}")
                 
-                loop_cmd = [
-                    'ffmpeg',
-                    '-y',
-                    '-stream_loop', str(loop_count - 1),  # FFmpeg loops n times total, so loop_count-1 for additional loops
-                    '-i', background_temp.name,
-                    '-t', str(audio_duration),  # Limit to audio duration
-                    '-c:v', 'libx264',
-                    '-preset', 'veryfast',
-                    '-crf', '23',
-                    '-movflags', '+faststart',
-                    looped_video_path.name
-                ]
+                # Use AudioMixer for precise mixing
+                mixed_audio_path = self.audio_mixer.mix_title_with_pop_sfx(
+                    main_audio_path=audio_temp,
+                    pop_sfx_path=pop_sfx_temp,
+                    pop_start_time=0.0,  # Pop at the very beginning
+                    pop_volume_delta=-6.0,  # Quieter pop sound
+                    output_path=temp_path / "audio_mixed.mp3"
+                )
                 
-                logger.info(f"Looping background {loop_count} times")
-                result = subprocess.run(loop_cmd, capture_output=True, text=True, cwd=temp_path)
-                if result.returncode != 0:
-                    logger.error(f"Failed to loop background: {result.stderr}")
-                    # Clean up temp directory
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-                    return False
-                
-                current_video_path = looped_video_path
+                if mixed_audio_path and mixed_audio_path.exists():
+                    current_audio_path = mixed_audio_path
+                    logger.info(f"Audio mixed successfully: {mixed_audio_path}")
+                else:
+                    logger.error("Failed to mix audio with AudioMixer")
+                    # Continue without pop SFX
+                    logger.warning("Continuing without pop SFX")
             
-            # Step 2: Add overlay image (visual hook) if provided
+            # Unified FFmpeg processing (replaces Steps 1, 2, 4)
+            # Build single unified FFmpeg command
+            
+            # Initialize command
+            cmd = ['ffmpeg', '-y']
+            
+            # Background Input
+            if needs_loop:
+                cmd.extend(['-stream_loop', '-1'])  # Infinite loop
+            cmd.extend(['-i', background_temp.name])
+            
+            # Overlay Input (if exists)
+            overlay_input_index = None
             if overlay_temp and overlay_temp.exists():
-                hook_video_path = temp_path / "video_with_hook.mp4"
-                
-                # Determine overlay timing and animation
+                overlay_input_index = len(cmd) // 2  # Count inputs before adding
+                cmd.extend(['-loop', '1', '-framerate', '30', '-i', overlay_temp.name])
+            
+            # Audio Input
+            audio_input_index = len(cmd) // 2
+            cmd.extend(['-i', current_audio_path.name])
+            
+            # Build unified filter_complex
+            filter_complex = None
+            
+            # Determine overlay timing and animation (same logic as before)
+            if overlay_temp and overlay_temp.exists():
                 if timing_data and 'card_start_time' in timing_data and 'card_end_time' in timing_data:
                     card_start = timing_data['card_start_time']
                     card_end = timing_data['card_end_time']
@@ -300,95 +316,52 @@ class VideoComposer:
                         f'[1:v]scale=900:-1[overlay_scaled];'
                         f'[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:enable=\'between(t,{card_start},{card_end})\''
                     )
-                
-                # Build overlay command with filter_complex
-                overlay_cmd = [
-                    'ffmpeg',
-                    '-y',
-                    '-i', current_video_path.name,
-                    '-loop', '1',
-                    '-framerate', '30',
-                    '-i', overlay_temp.name,
-                    '-filter_complex', filter_complex,
-                    '-c:v', 'libx264',
-                    '-preset', 'veryfast',
-                    '-crf', '23',
-                    '-c:a', 'copy',  # Copy audio if exists
-                    '-shortest',
-                    '-movflags', '+faststart',
-                    hook_video_path.name
-                ]
-                
-                logger.info(f"Adding overlay image: {overlay_temp.name}")
-                logger.debug(f"Filter complex: {filter_complex}")
-                result = subprocess.run(overlay_cmd, capture_output=True, text=True, cwd=temp_path)
-                if result.returncode != 0:
-                    logger.error(f"Failed to add overlay: {result.stderr}")
-                    # Clean up temp directory and raise exception (fail-fast)
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-                    raise RuntimeError(f"FFmpeg overlay failed: {result.stderr}")
-                else:
-                    current_video_path = hook_video_path
             
-            # Step 3: Mix audio with pop SFX if provided (using AudioMixer)
-            current_audio_path = audio_temp
-            if pop_sfx_temp and pop_sfx_temp.exists():
-                logger.info(f"Mixing pop SFX with audio using AudioMixer: {pop_sfx_temp.name}")
-                
-                # Use AudioMixer for precise mixing
-                mixed_audio_path = self.audio_mixer.mix_title_with_pop_sfx(
-                    main_audio_path=audio_temp,
-                    pop_sfx_path=pop_sfx_temp,
-                    pop_start_time=0.0,  # Pop at the very beginning
-                    pop_volume_delta=-6.0,  # Quieter pop sound
-                    output_path=temp_path / "audio_mixed.mp3"
-                )
-                
-                if mixed_audio_path and mixed_audio_path.exists():
-                    current_audio_path = mixed_audio_path
-                    logger.info(f"Audio mixed successfully: {mixed_audio_path}")
-                else:
-                    logger.error("Failed to mix audio with AudioMixer")
-                    # Continue without pop SFX
-                    logger.warning("Continuing without pop SFX")
-            
-            # Step 4: Final assembly with subtitles
-            logger.info(f"Final assembly: {current_video_path.name} + {current_audio_path.name}")
-            
-            # Build final command
-            cmd = [
-                'ffmpeg',
-                '-y',
-                '-i', current_video_path.name,
-                '-i', current_audio_path.name,
-            ]
-            
-            # Add subtitle filter if provided
+            # Add subtitles to filter_complex if provided
             if subtitle_temp and subtitle_temp.exists():
-                # Use simple filename since we're in the same directory
-                cmd.extend(['-vf', f'subtitles={subtitle_temp.name}'])
-                logger.info(f"Adding subtitles: {subtitle_temp.name}")
+                if filter_complex:
+                    # Chain subtitles after overlay
+                    filter_complex += f',subtitles={subtitle_temp.name}[vout]'
+                else:
+                    # No overlay, just subtitles
+                    filter_complex = f'[0:v]subtitles={subtitle_temp.name}[vout]'
+            elif filter_complex:
+                # No subtitles, but overlay exists - need output pad
+                filter_complex += '[vout]'
             
-            # Explicitly map video and audio streams to ensure audio is preserved
-            # When using -vf filter, we need to explicitly map streams
-            cmd.extend([
-                '-map', '0:v',  # Map video from first input
-                '-map', '1:a',  # Map audio from second input
-            ])
+            # Add filters and mapping to command
+            if filter_complex:
+                cmd.extend(['-filter_complex', filter_complex])
+                cmd.extend(['-map', '[vout]'])
+            else:
+                # No filter complex (no overlay, no subtitles)
+                cmd.extend(['-map', '0:v'])  # Raw background video
             
-            # Add output settings
+            # Map audio stream
+            # Audio input index depends on whether overlay exists
+            if overlay_temp and overlay_temp.exists():
+                # Overlay exists, audio is at input index 2
+                cmd.extend(['-map', '2:a'])
+            else:
+                # No overlay, audio is at input index 1
+                cmd.extend(['-map', '1:a'])
+            
+            # Final output settings
             cmd.extend([
                 '-c:v', 'libx264',
                 '-preset', 'veryfast',
                 '-crf', '23',
                 '-c:a', 'aac',
                 '-b:a', '128k',
-                '-shortest',  # End when shortest stream ends
+                '-t', str(audio_duration),  # Hard-stop at audio duration (needed with -stream_loop -1)
                 '-movflags', '+faststart',
                 output_path.name
             ])
             
-            logger.debug(f"Final FFmpeg command (cwd={temp_path}): {' '.join(cmd)}")
+            logger.info(f"Running unified FFmpeg command with {'overlay' if overlay_temp and overlay_temp.exists() else 'no overlay'}, "
+                       f"{'subtitles' if subtitle_temp and subtitle_temp.exists() else 'no subtitles'}, "
+                       f"{'looped background' if needs_loop else 'single background'}")
+            logger.debug(f"FFmpeg command (cwd={temp_path}): {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, text=True, cwd=temp_path)
             
             if result.returncode != 0:

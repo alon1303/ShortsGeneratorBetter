@@ -94,6 +94,7 @@ class RedditStoryRequest(BaseModel):
     voice_id: Optional[str] = None
     max_duration_minutes: Optional[int] = 3
     split_strategy: Optional[str] = "HYBRID"
+    split_into_parts: Optional[bool] = True
 
 
 class RedditStoryResponse(BaseModel):
@@ -419,8 +420,8 @@ async def process_reddit_story_background(job_id: str, request: RedditStoryReque
         _jobs[job_id]["message"] = "Processing story into parts..."
         _jobs[job_id]["progress"] = 0.3
         
-        processor = StoryProcessor()
-        processed_story = processor.process_story(story)
+        processor = StoryProcessor(min_part_duration=60, max_part_duration=90)
+        processed_story = processor.process_story(story, split_into_parts=request.split_into_parts)
         
         _jobs[job_id]["parts_count"] = processed_story.total_parts
         _jobs[job_id]["estimated_duration"] = processed_story.total_duration
