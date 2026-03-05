@@ -103,6 +103,44 @@ class BackgroundManager:
             return None
         
         return random.choice(backgrounds)
+
+    def get_random_backgrounds(self, count: int, theme: Optional[str] = None) -> List[Path]:
+        """
+        Select `count` unique background videos randomly.
+        If there aren't enough unique videos, allow repetitions.
+        
+        Args:
+            count: Number of background videos to select
+            theme: Optional theme to filter by (defaults to random theme)
+            
+        Returns:
+            List of Path objects to selected background videos
+        """
+        if count <= 0:
+            return []
+        
+        if theme:
+            backgrounds = self.get_backgrounds_by_theme(theme)
+        else:
+            # Get backgrounds from all themes
+            backgrounds = []
+            for theme_name in self.get_available_themes():
+                backgrounds.extend(self.get_backgrounds_by_theme(theme_name))
+        
+        if not backgrounds:
+            logger.warning("No background videos found")
+            return []
+        
+        # Ensure we have unique backgrounds if possible
+        unique_backgrounds = list(set(backgrounds))  # Remove duplicates
+        if len(unique_backgrounds) >= count:
+            selected = random.sample(unique_backgrounds, count)
+        else:
+            # Not enough unique videos, allow repetitions
+            selected = random.choices(unique_backgrounds, k=count)
+        
+        logger.debug(f"Selected {len(selected)} background videos (requested {count})")
+        return selected
     
     def get_video_metadata(self, video_path: Path) -> Dict[str, Any]:
         """
@@ -424,6 +462,171 @@ class BackgroundManager:
         
         return output_path
     
+    def create_sequential_background_clip(
+        self,
+        duration: float,
+        theme: Optional[str] = None,
+        output_path: Optional[Path] = None,
+        max_clip_duration: float = 10.0
+    ) -> Optional[Path]:
+        """
+        Create a sequential background video clip by concatenating random clips
+        from multiple background videos to cover the target duration.
+        
+        Args:
+            duration: Desired total clip duration in seconds
+            theme: Optional theme for background selection
+            output_path: Optional output path (defaults to temporary file)
+            max_clip_duration: Maximum duration for each individual clip (default 10s)
+            
+        Returns:
+            Path to created sequential clip, or None if failed
+        """
+        import math
+        import uuid
+        import shutil
+        
+        # Validate duration
+        if duration <= 0:
+            logger.error(f"Invalid duration: {duration}")
+            return None
+        
+        if duration > settings.MAX_BACKGROUND_DURATION:
+            logger.warning(f"Duration {duration}s exceeds maximum {settings.MAX_BACKGROUND_DURATION}s, clipping")
+            duration = min(duration, settings.MAX_BACKGROUND_DURATION)
+        
+        # Calculate number of clips needed
+        num_clips = max(1, math.ceil(duration / max_clip_duration))
+        logger.info(f"Creating sequential background clip: {duration:.1f}s total using {num_clips} clips")
+        
+        # Get random backgrounds
+        backgrounds = self.get_random_backgrounds(num_clips, theme)
+        if not backgrounds:
+            logger.error("No background videos available")
+            return None
+        
+        # Create temporary directory for intermediate clips
+        temp_dir = Path(tempfile.mkdtemp())
+        try:
+            clip_paths = []
+            accumulated_duration = 0.0
+            
+            for i, bg_path in enumerate(backgrounds):
+                # Calculate clip duration for this segment
+                remaining = duration - accumulated_duration
+                if remaining <= 0:
+                    break
+                
+                clip_duration = min(max_clip_duration, remaining)
+                
+                # Get video metadata to ensure we don't exceed source duration
+                metadata = self.get_video_metadata(bg_path)
+                source_duration = metadata.get('duration_seconds', 0)
+                if source_duration < clip_duration:
+                    # Source is shorter than desired clip duration, use entire video
+                    clip_duration = source_duration
+                
+                if clip_duration <= 0:
+                    logger.warning(f"Background video {bg_path.name} has zero duration, skipping")
+                    continue
+                
+                # Generate random start time
+                start_time = self.get_random_start_time(bg_path, clip_duration)
+                
+                # Create output path for this clip
+                clip_path = temp_dir / f"clip_{i}_{uuid.uuid4().hex[:8]}.mp4"
+                
+                # Extract clip
+                success = self.extract_video_clip(
+                    video_path=bg_path,
+                    start_time=start_time,
+                    duration=clip_duration,
+                    output_path=clip_path,
+                    target_width=settings.TARGET_WIDTH,
+                    target_height=settings.TARGET_HEIGHT
+                )
+                
+                if not success:
+                    logger.error(f"Failed to extract clip {i} from {bg_path.name}")
+                    continue
+                
+                # Verify clip was created and has content
+                if not clip_path.exists() or clip_path.stat().st_size == 0:
+                    logger.error(f"Extracted clip {i} is empty or missing: {clip_path}")
+                    continue
+                
+                clip_paths.append(clip_path)
+                accumulated_duration += clip_duration
+                
+                logger.debug(f"Created clip {i+1}/{num_clips}: {clip_duration:.1f}s from {bg_path.name}")
+                
+                if accumulated_duration >= duration:
+                    break
+            
+            if not clip_paths:
+                logger.error("No clips were successfully extracted")
+                return None
+            
+            if accumulated_duration < duration:
+                logger.warning(f"Accumulated duration ({accumulated_duration:.1f}s) is less than requested ({duration:.1f}s)")
+            
+            # Create output path if not provided
+            if output_path is None:
+                output_path = Path(tempfile.gettempdir()) / f"sequential_background_{uuid.uuid4()}.mp4"
+            
+            # Create concat file list
+            concat_file = temp_dir / "concat_list.txt"
+            with open(concat_file, 'w', encoding='utf-8') as f:
+                for clip_path in clip_paths:
+                    # Escape single quotes and backslashes for Windows paths
+                    path_str = str(clip_path).replace('\\', '\\\\').replace("'", "'\\''")
+                    f.write(f"file '{path_str}'\n")
+            
+            # Use FFmpeg concat demuxer to concatenate clips
+            cmd = [
+                'ffmpeg',
+                '-y',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', str(concat_file),
+                '-c', 'copy',  # Copy codec (fast, no re-encoding)
+                '-movflags', '+faststart',
+                str(output_path)
+            ]
+            
+            logger.info(f"Concatenating {len(clip_paths)} clips into sequential background")
+            logger.debug(f"FFmpeg command: {' '.join(cmd)}")
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                logger.error(f"FFmpeg concatenation failed: {result.stderr}")
+                return None
+            
+            # Verify output file
+            if not output_path.exists() or output_path.stat().st_size == 0:
+                logger.error(f"Output file not created or empty: {output_path}")
+                return None
+            
+            # Get output metadata
+            output_metadata = self.get_video_metadata(output_path)
+            output_duration = output_metadata.get('duration_seconds', 0)
+            
+            # Check if duration matches (within tolerance)
+            duration_diff = abs(output_duration - accumulated_duration)
+            if duration_diff > 1.0:  # 1 second tolerance
+                logger.warning(f"Output duration mismatch: expected {accumulated_duration:.1f}s, got {output_duration:.1f}s")
+            
+            logger.info(f"Sequential background clip created: {output_path} ({output_duration:.1f}s, {len(clip_paths)} clips)")
+            return output_path
+            
+        finally:
+            # Clean up temporary directory
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception as e:
+                logger.warning(f"Failed to clean up temp directory {temp_dir}: {e}")
+
     def validate_backgrounds(self) -> Dict[str, Any]:
         """
         Validate all background videos in the backgrounds directory.
