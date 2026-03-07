@@ -6,7 +6,7 @@ Handles environment variables, default values, and validation.
 import os
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from pydantic import Field, validator
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     
     # File upload settings
     MAX_FILE_SIZE_MB: int = 100
-    ALLOWED_EXTENSIONS: List[str] = [".mp4", ".avi", ".mkv", ".mov", ".webm"]
+    ALLOWED_EXTENSIONS: Union[str, List[str]] = [".mp4", ".avi", ".mkv", ".mov", ".webm"]
     
     # Reddit Settings (using public JSON endpoints - no API keys required)
     REDDIT_USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -110,6 +110,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"  # Allow extra environment variables (e.g., Google OAuth)
     
     @validator("UPLOAD_DIR", "OUTPUT_DIR", "DATA_DIR", "CACHE_DIR", "ASSETS_DIR", "BACKGROUNDS_DIR", pre=True)
     def validate_and_create_dirs(cls, v: Path) -> Path:
