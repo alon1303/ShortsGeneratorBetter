@@ -526,8 +526,10 @@ class AutoPipeline:
                 await asyncio.sleep(wait_time)
         
         try:
-            # Generate YouTube metadata
-            title = f"{story.title} #shorts"
+            # Generate YouTube metadata - truncate title to fit YouTube's 100 character limit
+            raw_title = f"{story.title} #shorts"
+            title = self.youtube_uploader.truncate_title_for_youtube(raw_title)
+            
             description = self.youtube_uploader.generate_description(
                 story_title=story.title,
                 subreddit=story.subreddit,

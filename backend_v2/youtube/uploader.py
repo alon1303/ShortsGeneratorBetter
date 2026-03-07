@@ -25,7 +25,11 @@ from google.auth.exceptions import RefreshError, GoogleAuthError
 logger = logging.getLogger(__name__)
 
 # If modifying these scopes, delete the file token.json
-SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
+# Need both upload and read permissions: upload for uploading, read for fetching video details
+SCOPES = [
+    'https://www.googleapis.com/auth/youtube.upload',
+    'https://www.googleapis.com/auth/youtube.readonly'  # Added for reading video details after upload
+]
 
 @dataclass
 class YouTubeUploadResult:
@@ -557,6 +561,36 @@ class YouTubeUploader:
         unique_tags = list(dict.fromkeys(tags))[:25]
         
         return unique_tags
+    
+    @staticmethod
+    def truncate_title_for_youtube(title: str, max_length: int = 100, suffix: str = "...") -> str:
+        """
+        Truncate title to fit YouTube's character limit.
+        YouTube titles must be 100 characters or less.
+        
+        Args:
+            title: Original title
+            max_length: Maximum allowed length (default: 100 for YouTube)
+            suffix: Suffix to add when truncating (default: "...")
+        
+        Returns:
+            Truncated title that fits within max_length
+        """
+        if len(title) <= max_length:
+            return title
+        
+        # Calculate available length for title content (minus suffix)
+        available_length = max_length - len(suffix)
+        
+        # Truncate to available length, ensuring we don't cut in the middle of a word
+        truncated = title[:available_length]
+        
+        # Try to find the last space to avoid cutting words
+        last_space = truncated.rfind(' ')
+        if last_space > available_length * 0.8:  # Only use if we're not losing too much
+            truncated = truncated[:last_space]
+        
+        return truncated + suffix
     
     def generate_description(self, story_title: str, subreddit: str, reddit_url: str, video_parts: int = 1) -> str:
         """
