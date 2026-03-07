@@ -1,310 +1,286 @@
-# System Patterns: ShortsGenerator Automation Pipeline
+# System Patterns: Architecture and Design
 
-## System Architecture
+## System Overview
+ShortsGenerator is a modular Python/FastAPI application that converts Reddit stories into short-form videos. The system follows a pipeline architecture where data flows through specialized processing stages.
 
-### High-Level Architecture Overview
-The ShortsGenerator Automation Pipeline follows a **modular, component-based architecture** with clear separation of concerns. The system is organized into four main layers:
-
-1. **Orchestration Layer** (`auto_pipeline.py`): Coordinates the entire workflow
-2. **Content Layer** (`reddit_story/`): Handles content fetching and processing
-3. **Processing Layer** (`video_composer.py`, `tts_router.py`): Converts content to videos
-4. **Publishing Layer** (`youtube/uploader.py`): Manages YouTube uploads and metadata
-
-### Component Relationships
+## High-Level Architecture
 ```
-AutoPipeline (Orchestrator)
-├── RedditClient (Content Fetcher)
-├── StoryProcessor (Content Processor)
-├── VideoComposer (Video Generator)
-└── YouTubeUploader (Publisher)
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Input Layer   │───▶│ Processing Layer│───▶│  Output Layer   │
+│  - Reddit URLs  │    │  - Story Split  │    │  - Video Files  │
+│  - Custom Text  │    │  - TTS Narration│    │  - Subtitles    │
+│  - Subreddit    │    │  - Backgrounds  │    │  - Title Cards  │
+└─────────────────┘    │  - Subtitles    │    └─────────────────┘
+                       │  - Composition  │
+                       └─────────────────┘
 ```
 
-## Key Technical Decisions
+## Core Components
 
-### 1. Asynchronous-First Design
-- **Decision**: Use asyncio for all I/O operations
-- **Rationale**: Better concurrency for API calls and file operations
-- **Implementation**: All components expose async methods
-- **Benefits**: Non-blocking operations, efficient resource usage
+### 1. Input Processing (`reddit_story/`)
+- **RedditClient**: Fetches stories from Reddit using public JSON endpoints
+- **StoryProcessor**: Splits stories into optimal segments for narration
+- **Models**: Data classes (AudioChunk, WordTimestamp, RedditStory)
 
-### 2. Modular Component Design
-- **Decision**: Separate concerns into independent modules
-- **Rationale**: Easier testing, maintenance, and extension
-- **Implementation**: Each major function in separate class/file
-- **Benefits**: Code reuse, isolated failures, clear interfaces
+### 2. Audio Generation (`reddit_story/`)
+- **TTS Router**: Routes to different TTS engines (Edge TTS, ElevenLabs)
+- **EdgeTTS Client**: Free Microsoft Edge TTS integration
+- **AudioMixer**: Mixes narration with sound effects
 
-### 3. Configuration Centralization
-- **Decision**: Single configuration source (`config/settings.py`)
-- **Rationale**: Consistent settings across all components
-- **Implementation**: Pydantic Settings with environment variable support
-- **Benefits**: Type safety, validation, easy deployment configuration
+### 3. Visual Components (`reddit_story/`)
+- **BackgroundManager**: Manages background video selection and processing
+- **ImageGenerator**: Creates title cards using Playwright HTML-to-image
+- **SubtitleGenerator**: Generates ASS format subtitles with word-level highlighting
 
-### 4. Stateless with Persistent State Tracking
-- **Decision**: Components are stateless but track state in JSON files
-- **Rationale**: Crash recovery and monitoring
-- **Implementation**: `processed_posts.json`, `pipeline_stats.json`, cycle logs
-- **Benefits**: Resumable operations, failure analysis, statistics tracking
+### 4. Video Composition (`reddit_story/`)
+- **VideoComposer**: Main composition engine combining all elements
+- **TimingCalculator**: Calculates timing for title card animations
 
-### 5. Graceful Degradation
-- **Decision**: Individual story failures don't stop pipeline
-- **Rationale**: Maximize throughput despite intermittent failures
-- **Implementation**: Try/except per story with retry logic
-- **Benefits**: Higher success rates, continuous operation
-
-## Design Patterns in Use
-
-### 1. Pipeline Pattern
-- **Pattern**: Sequential processing pipeline
-- **Implementation**: `AutoPipeline.run_single_cycle()` orchestrates: Fetch → Process → Generate → Upload
-- **Use Case**: End-to-end story transformation
-
-### 2. Strategy Pattern
-- **Pattern**: Interchangeable algorithms
-- **Implementation**: `tts_router.py` supports multiple TTS engines (Edge, ElevenLabs)
-- **Use Case**: Different TTS providers based on configuration
-
-### 3. Builder Pattern
-- **Pattern**: Step-by-step object construction
-- **Implementation**: `VideoComposer` builds videos from components (audio, background, subtitles)
-- **Use Case**: Complex video assembly with multiple elements
-
-### 4. Repository Pattern
-- **Pattern**: Data access abstraction
-- **Implementation**: `RedditClient` abstracts Reddit API access
-- **Use Case**: Story fetching with caching and duplicate prevention
-
-### 5. Decorator Pattern
-- **Pattern**: Add functionality to objects dynamically
-- **Implementation**: `AsyncYouTubeUploader` wraps `YouTubeUploader` for async operations
-- **Use Case**: Adapt blocking APIs to async environment
-
-### 6. Observer Pattern
-- **Pattern**: Event notification system
-- **Implementation**: Logging and statistics tracking across pipeline
-- **Use Case**: Monitoring and error reporting
-
-## Critical Implementation Paths
-
-### Main Execution Path
-1. **Pipeline Initialization** (`AutoPipeline.initialize()`)
-   - Load configuration
-   - Authenticate YouTube API
-   - Initialize Reddit client
-
-2. **Story Fetching** (`AutoPipeline.fetch_stories()`)
-   - Query multiple subreddits
-   - Filter by score, length, duplicates
-   - Return eligible stories
-
-3. **Story Processing** (`AutoPipeline.process_story()`)
-   - Split story into parts
-   - Generate title card
-   - Create TTS audio
-   - Generate video parts
-   - Concatenate final video
-
-4. **YouTube Upload** (`AutoPipeline.upload_to_youtube_if_enabled()`)
-   - Rate limit checking
-   - Generate metadata
-   - Upload video
-   - Handle quota errors
-
-### Error Recovery Path
-1. **Retry Logic** (`AutoPipeline.process_story_with_retry()`)
-   - Exponential backoff (30s, 60s, 90s)
-   - Different retry strategies per error type
-   - Maximum retries configurable
-
-2. **Error Classification** (`PipelineStats.add_error()`)
-   - Network errors (retry)
-   - Processing errors (log and skip)
-   - Quota errors (stop or continue)
-   - Upload errors (retry with delay)
-
-### State Persistence Path
-1. **Duplicate Prevention** (`RedditClient.mark_post_as_processed()`)
-   - Append to `processed_posts.json`
-   - Memory cache with periodic flush
-
-2. **Statistics Tracking** (`PipelineStats.save_stats()`)
-   - Update `pipeline_stats.json`
-   - Track success rates, durations, error types
-
-3. **Cycle Logging** (`AutoPipeline._save_cycle_results()`)
-   - Save individual cycle results
-   - JSON format for analysis
-
-## Component Interfaces
-
-### AutoPipeline Interface
-```python
-class AutoPipeline:
-    async def initialize() -> bool
-    async def fetch_stories() -> List[RedditStory]
-    async def process_story(story: RedditStory) -> Optional[Path]
-    async def upload_to_youtube_if_enabled(video_path: Path, story: RedditStory) -> Optional[YouTubeUploadResult]
-    async def run_single_cycle() -> Dict[str, Any]
-    async def run_continuous(interval_minutes: int, max_cycles: Optional[int])
-```
-
-### RedditClient Interface
-```python
-class RedditClient:
-    async def initialize() -> bool
-    async def fetch_trending_stories(subreddit: List[str], **filters) -> List[RedditStory]
-    def mark_post_as_processed(post_id: str)
-    async def close()
-```
-
-### YouTubeUploader Interface
-```python
-class YouTubeUploader:
-    def get_authenticated_service() -> Optional[Any]
-    def upload_video(video_path: Path, **metadata) -> YouTubeUploadResult
-    def validate_credentials() -> bool
-    def generate_default_tags(subreddit: str, story_title: str) -> List[str]
-    def generate_description(**story_info) -> str
-```
+### 5. API Layer (`backend_v2/`)
+- **FastAPI Application**: REST API with background job processing
+- **Job Management**: In-memory job tracking for async operations
+- **Configuration**: Centralized settings management
 
 ## Data Flow Patterns
 
-### Story Data Flow
-1. **Raw Story** → `RedditStory` object
-2. **RedditStory** → `ProcessedStory` (split into parts)
-3. **ProcessedStory** → Audio chunks + timing data
-4. **Audio + Background** → Video parts
-5. **Video parts** → Final concatenated video
+### Primary Pipeline Flow
+```
+1. Story Acquisition → 2. Text Processing → 3. Audio Generation → 4. Visual Generation → 5. Video Composition
+```
 
-### Metadata Flow
-1. **Reddit metadata** (title, subreddit, score, URL)
-2. **Processing metadata** (part count, durations, success/failure)
-3. **YouTube metadata** (title, description, tags, privacy)
-4. **Statistics metadata** (timestamps, error types, durations)
+### Component Interaction Pattern
+```python
+# Typical usage pattern
+story = await reddit_client.fetch_story(url)
+processed = story_processor.process_story(story)
+audio_chunks = await tts_router.generate_audio(processed)
+video = video_composer.create_video(audio_chunks)
+```
 
-### Error Flow
-1. **Component error** → Exception caught
-2. **Exception** → Logged with stack trace
-3. **Error type** → Classified (network, processing, upload, quota)
-4. **Error stats** → Tracked in `PipelineStats`
-5. **Recovery** → Retry or skip based on error type
+## Key Design Patterns
 
-## Integration Patterns
+### 1. Pipeline Pattern
+Each component processes input and passes output to the next component. Components are loosely coupled and can be tested independently.
 
-### API Integration Pattern
-- **Pattern**: Adapter + Circuit Breaker
-- **Implementation**: Wrapper classes with retry logic
-- **Examples**: RedditClient, YouTubeUploader
-- **Features**: Rate limiting, error handling, caching
+### 2. Builder Pattern (VideoComposer)
+VideoComposer builds videos step-by-step:
+- Creates background clips
+- Generates subtitles  
+- Combines audio with visuals
+- Applies post-processing effects
 
-### File Processing Pattern
-- **Pattern**: Producer-Consumer with temporary files
-- **Implementation**: Generate intermediate files, clean up after processing
-- **Examples**: Audio generation, video composition
-- **Features**: Disk space management, cleanup routines
+### 3. Strategy Pattern (TTS Router)
+Different TTS engines can be swapped via configuration:
+- Edge TTS (default, free)
+- ElevenLabs (premium, higher quality)
 
-### Configuration Pattern
-- **Pattern**: Singleton with environment overrides
-- **Implementation**: `Settings` class with pydantic validation
-- **Features**: Type safety, default values, environment variable support
+### 4. Factory Pattern (BackgroundManager)
+Creates different types of background clips:
+- Single clip from one video
+- Sequential clips from multiple videos
+- Theme-based selection
 
-## Scalability Considerations
+### 5. Observer Pattern (Job Tracking)
+API endpoints notify clients of processing progress through status updates.
 
-### Horizontal Scaling
-- **Current**: Single instance processing
-- **Potential**: Multiple instances with different subreddits
-- **Challenges**: Duplicate prevention synchronization
-- **Solution**: Centralized duplicate tracking (Redis, database)
+## File Organization Pattern
+```
+backend_v2/
+├── reddit_story/          # Core video generation logic
+│   ├── models.py          # Data classes
+│   ├── reddit_client.py   # Reddit API
+│   ├── story_processor.py # Text processing
+│   ├── tts_router.py      # Audio generation
+│   ├── background_manager.py # Background videos
+│   ├── subtitle_generator.py # Subtitles
+│   └── video_composer.py  # Main composition engine
+├── config/
+│   └── settings.py        # Configuration management
+├── main.py               # FastAPI application
+└── tests/                # Test files
+```
 
-### Resource Management
-- **CPU**: Video generation is intensive
-- **Memory**: Large video files in memory
-- **Disk**: Temporary and final video storage
-- **Network**: API rate limits and quotas
+## Configuration Patterns
 
-### Performance Optimization
-- **Bottlenecks**: TTS generation, video rendering
-- **Optimizations**: Caching, parallel processing where possible
-- **Monitoring**: Track processing times, identify slow components
+### Settings Management
+- **Centralized Configuration**: All settings in `config/settings.py`
+- **Environment Variable Support**: `.env` file loading via pydantic-settings
+- **Validation**: Automatic validation with pydantic
+- **Directory Management**: Auto-creates necessary directories
+
+### Configuration Categories
+```python
+# Application settings
+APP_NAME, APP_VERSION, DEBUG
+
+# Server settings  
+HOST, PORT, WORKERS
+
+# Reddit settings
+DEFAULT_SUBREDDIT, MIN_STORY_SCORE
+
+# TTS settings
+TTS_ENGINE, DEFAULT_VOICE_ID
+
+# Video settings
+TARGET_WIDTH, TARGET_HEIGHT, VIDEO_CRF
+
+# Story settings
+MIN_PART_DURATION, MAX_PART_DURATION
+```
+
+## Error Handling Patterns
+
+### Component-Level Errors
+Each component raises specific exceptions:
+- `FileNotFoundError`: Missing required files
+- `ValueError`: Invalid parameters
+- `RuntimeError`: Processing failures
+- `HTTPException`: API errors
+
+### Error Recovery
+1. **Validation First**: Validate inputs before processing
+2. **Graceful Degradation**: Continue with available components when possible
+3. **Cleanup**: Proper cleanup of temporary files on failure
+4. **Logging**: Detailed logging for debugging
+
+## Concurrency Patterns
+
+### Async Processing
+- **FastAPI Async Endpoints**: Non-blocking HTTP handlers
+- **Background Tasks**: Long-running operations in background
+- **Job Tracking**: In-memory job status tracking
+
+### Sequential vs Parallel
+- **Sequential**: Within a single video (background clips, subtitle generation)
+- **Parallel**: Multiple videos can be processed concurrently via API
+
+## State Management Patterns
+
+### Stateless Components
+Most components are stateless - they process input and produce output without maintaining internal state.
+
+### Cached State
+- **Background Metadata**: Video metadata cached to avoid repeated ffprobe calls
+- **Job Tracking**: In-memory job status (in production would use Redis/database)
+
+### Temporary State
+- **Temporary Files**: Created during processing, cleaned up automatically
+- **Intermediate Results**: Passed between components via data classes
 
 ## Testing Patterns
 
 ### Unit Testing
-- **Pattern**: Mock external dependencies
-- **Focus**: Individual component logic
-- **Tools**: pytest, unittest, mocks
+Each component has corresponding test file:
+- `test_video_composer.py`
+- `test_background_manager.py`
+- `test_reddit_client.py`
+
+### Mock Patterns
+- **File Operations**: Mock filesystem for testing
+- **External APIs**: Mock HTTP responses
+- **FFmpeg**: Mock subprocess calls
 
 ### Integration Testing
-- **Pattern**: Test component interactions
-- **Focus**: End-to-end flow without YouTube upload
-- **Tools**: `--no-upload` flag, test files
+- **Component Integration**: Test how components work together
+- **API Integration**: Test HTTP endpoints
+- **End-to-End**: Full pipeline with mocked external dependencies
 
-### Performance Testing
-- **Pattern**: Long-running stability tests
-- **Focus**: Memory leaks, crash recovery
-- **Tools**: `--cycles` parameter, memory profiling
+## Performance Patterns
 
-### Regression Testing
-- **Pattern**: Test known failure scenarios
-- **Focus**: Error handling, edge cases
-- **Tools**: Test fixtures, error injection
+### Optimization Strategies
+1. **Caching**: Metadata caching for background videos
+2. **Lazy Loading**: Load resources only when needed
+3. **Parallel Processing**: Ready for async video processing
+4. **Efficient Encoding**: FFmpeg optimization flags
+
+### Resource Management
+- **Temporary Files**: Automatic cleanup
+- **Memory Management**: Proper handling of large video files
+- **Process Management**: Subprocess timeouts and resource limits
+
+## Extension Patterns
+
+### Adding New TTS Engines
+1. Create new client class following TTS interface
+2. Register in TTS router
+3. Update configuration options
+
+### Adding New Background Themes
+1. Add theme directory with video files
+2. Update `BACKGROUND_THEMES` in settings
+3. BackgroundManager automatically discovers new themes
+
+### Adding New Subtitle Styles
+1. Extend SubtitleGenerator class
+2. Add new style configuration
+3. Integrate with VideoComposer
+
+## Security Patterns
+
+### Input Validation
+- **File Uploads**: Validate file types and sizes
+- **URL Input**: Validate Reddit URLs
+- **Text Input**: Sanitize user-provided text
+
+### Safe File Operations
+- **Path Sanitization**: Prevent directory traversal
+- **Temporary Files**: Secure temp file creation
+- **File Permissions**: Appropriate file permissions
+
+### API Security
+- **CORS Configuration**: Restrict to trusted origins
+- **Rate Limiting**: Ready for implementation
+- **Input Validation**: Pydantic models for all API inputs
 
 ## Deployment Patterns
 
-### Development Environment
-- **Pattern**: Local execution with full stack
-- **Requirements**: Python 3.8+, FFmpeg, dependencies
-- **Setup**: `pip install -r requirements.txt`
+### Development
+- **Local Server**: Uvicorn with auto-reload
+- **Virtual Environment**: Python venv for dependencies
+- **Environment Variables**: `.env` file for configuration
 
-### Production Environment
-- **Pattern**: Headless server with monitoring
-- **Requirements**: Stable internet, sufficient disk space
-- **Monitoring**: Log files, statistics, error alerts
+### Production Ready
+- **Process Manager**: Ready for Gunicorn/Uvicorn deployment
+- **Configuration**: Environment variable based
+- **Logging**: Structured logging with levels
+- **Health Checks**: `/health` endpoint
+
+### Scalability Considerations
+- **Stateless Design**: Horizontal scaling ready
+- **Job Queue**: Architecture supports Celery/Redis
+- **Storage**: Configurable output directories
+
+## Monitoring Patterns
+
+### Logging Strategy
+- **Structured Logging**: JSON format for production
+- **Log Levels**: DEBUG, INFO, WARNING, ERROR
+- **Component Logging**: Separate loggers per component
+
+### Health Monitoring
+- **Health Endpoint**: `/health` for service status
+- **System Info**: `/system-info` for component status
+- **Job Status**: API for tracking processing jobs
+
+### Performance Monitoring
+- **Processing Time**: Log generation times
+- **Resource Usage**: Log memory and CPU usage
+- **Error Rates**: Track failure rates
+
+## Maintenance Patterns
+
+### Code Organization
+- **Modular Structure**: Each component in separate file
+- **Clear Interfaces**: Well-defined function signatures
+- **Documentation**: Docstrings and type hints
 
 ### Configuration Management
-- **Pattern**: Environment variables + .env file
-- **Security**: Keep `client_secrets.json` secure
-- **Updates**: Version control for configuration changes
+- **Version Control**: Settings in version control
+- **Environment Specific**: Different settings per environment
+- **Validation**: Automatic validation on load
 
-## Known Architecture Limitations
-
-### 1. Single-Threaded Processing
-- **Limitation**: Stories processed sequentially
-- **Impact**: Limits throughput to ~3 stories/hour
-- **Mitigation**: Could parallelize with careful resource management
-
-### 2. Local File Storage
-- **Limitation**: All videos stored locally
-- **Impact**: Disk space consumption
-- **Mitigation**: Periodic cleanup, cloud storage option
-
-### 3. YouTube Quota Limits
-- **Limitation**: ~6 uploads/day maximum
-- **Impact**: Limits scalability
-- **Mitigation**: Multiple YouTube accounts, quota management
-
-### 4. No Distributed State
-- **Limitation**: JSON files for state tracking
-- **Impact**: Single instance only, no failover
-- **Mitigation**: Database backend for distributed processing
-
-## Future Architecture Directions
-
-### 1. Microservices Architecture
-- **Direction**: Separate services for Reddit, TTS, Video, YouTube
-- **Benefits**: Independent scaling, polyglot implementation
-- **Challenges**: Service coordination, data consistency
-
-### 2. Cloud-Native Deployment
-- **Direction**: Containerized services on Kubernetes
-- **Benefits**: Auto-scaling, high availability
-- **Challenges**: Cost, complexity
-
-### 3. Event-Driven Architecture
-- **Direction**: Message queues for pipeline steps
-- **Benefits**: Better decoupling, fault tolerance
-- **Challenges**: Message ordering, delivery guarantees
-
-### 4. Multi-Platform Publishing
-- **Direction**: Extend beyond YouTube to TikTok, Instagram
-- **Benefits**: Increased reach, redundancy
-- **Challenges**: Platform-specific requirements
+### Update Strategy
+- **Backward Compatibility**: Maintain API compatibility
+- **Gradual Rollout**: Feature flags for new features
+- **Rollback Plan**: Quick rollback capability

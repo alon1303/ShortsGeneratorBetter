@@ -178,11 +178,9 @@ class VideoComposer:
             bg_result = subprocess.run(bg_cmd, capture_output=True, text=True)
             bg_duration = float(bg_result.stdout.strip()) if bg_result.stdout else 0
             
-            # Fix micro-second background duration bug
-            needs_loop = bg_duration < (audio_duration - 0.5)
-            if needs_loop:
-                loop_count = int(audio_duration / bg_duration) + 1
-                logger.warning(f"Background ({bg_duration:.1f}s) is shorter than audio ({audio_duration:.1f}s), will loop {loop_count} times")
+            # Check if background duration matches audio duration (sequential background should match)
+            if bg_duration < (audio_duration - 0.5):
+                logger.warning(f"Background ({bg_duration:.1f}s) is shorter than audio ({audio_duration:.1f}s), but using sequential background should have matched")
             else:
                 logger.info(f"Background duration ({bg_duration:.1f}s) is sufficient for audio ({audio_duration:.1f}s)")
             
@@ -255,8 +253,6 @@ class VideoComposer:
             cmd = ['ffmpeg', '-y']
             
             # Background Input
-            if needs_loop:
-                cmd.extend(['-stream_loop', '-1'])  # Infinite loop
             cmd.extend(['-i', background_temp.name])
             
             # Overlay Input (if exists)
@@ -354,14 +350,13 @@ class VideoComposer:
                 '-pix_fmt', 'yuv420p',  # Required for YouTube compatibility
                 '-c:a', 'aac',
                 '-b:a', '128k',
-                '-t', str(audio_duration),  # Hard-stop at audio duration (needed with -stream_loop -1)
+                '-t', str(audio_duration),  # Hard-stop at audio duration
                 '-movflags', '+faststart',
                 output_path.name
             ])
             
             logger.info(f"Running unified FFmpeg command with {'overlay' if overlay_temp and overlay_temp.exists() else 'no overlay'}, "
-                       f"{'subtitles' if subtitle_temp and subtitle_temp.exists() else 'no subtitles'}, "
-                       f"{'looped background' if needs_loop else 'single background'}")
+                       f"{'subtitles' if subtitle_temp and subtitle_temp.exists() else 'no subtitles'}, dynamic background")
             logger.debug(f"FFmpeg command (cwd={temp_path}): {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, text=True, cwd=temp_path)
             
@@ -393,6 +388,33 @@ class VideoComposer:
             # Clean up temp directory if it exists
             if 'temp_dir' in locals():
                 shutil.rmtree(temp_dir, ignore_errors=True)
+            return False
+    
+    def apply_1_4x_speed(self, input_path: Path, output_path: Path) -> bool:
+        try:
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', str(input_path),
+                '-filter_complex', '[0:v]setpts=0.714*PTS[v];[0:a]atempo=1.4[a]',
+                '-map', '[v]', '-map', '[a]',
+                '-c:v', 'libx264',
+                '-preset', 'veryfast',
+                '-c:a', 'aac',
+                str(output_path)
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            if result.returncode != 0:
+                logger.error(f"FFmpeg 1.4x speed failed: {result.stderr}")
+                return False
+
+            if not output_path.exists() or output_path.stat().st_size == 0:
+                logger.error("1.4x speed output file empty or missing.")
+                return False
+
+            return True
+        except Exception as e:
+            logger.error(f"Error applying 1.4x speed: {e}")
             return False
     
     def create_video_part(
@@ -435,12 +457,13 @@ class VideoComposer:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             
-            # Step 1: Create background clip
-            logger.info(f"Creating background clip for {audio_chunk.duration_seconds:.1f}s audio")
-            background_path = self.background_manager.create_background_clip(
+            # Step 1: Create sequential background clip with dynamic changing backgrounds
+            logger.info(f"Creating sequential background clip for {audio_chunk.duration_seconds:.1f}s audio")
+            background_path = self.background_manager.create_sequential_background_clip(
                 duration=audio_chunk.duration_seconds,
-                theme=theme,
-                output_path=temp_path / "background.mp4"
+                theme=None,
+                output_path=temp_path / "background.mp4",
+                max_clip_duration=(audio_chunk.duration_seconds / 2.0)
             )
             
             if not background_path:
@@ -488,8 +511,17 @@ class VideoComposer:
             if not success:
                 raise RuntimeError("Failed to combine audio with background")
         
-        logger.info(f"Video part created successfully: {output_path}")
-        return output_path
+        # Apply 1.4x speed post-processing
+        final_speed_path = output_path.parent / f"{output_path.stem}_1_4x{output_path.suffix}"
+        speed_success = self.apply_1_4x_speed(output_path, final_speed_path)
+        
+        if speed_success and final_speed_path.exists() and final_speed_path.stat().st_size > 0:
+            final_return_path = final_speed_path
+        else:
+            final_return_path = output_path
+            
+        logger.info(f"Video part created successfully: {final_return_path}")
+        return final_return_path
     
     def concatenate_videos(
         self,
@@ -642,7 +674,7 @@ class VideoComposer:
             # Verify final video
             if not output_path.exists() or output_path.stat().st_size == 0:
                 raise RuntimeError(f"Final video not created: {output_path}")
-            
+
             # Get video metadata
             try:
                 cmd = [
@@ -657,7 +689,7 @@ class VideoComposer:
                 logger.info(f"Final video created: {output_path} ({duration:.1f}s)")
             except Exception as e:
                 logger.warning(f"Could not get final video duration: {e}")
-            
+
             return output_path
     
     def create_separate_video_parts(

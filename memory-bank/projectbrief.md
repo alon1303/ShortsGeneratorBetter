@@ -1,69 +1,53 @@
-# Project Brief: ShortsGenerator Automation Pipeline
+# Project Brief: ShortsGenerator Video Generation
 
-## Project Overview
-ShortsGenerator is an automated content creation pipeline that transforms trending Reddit stories into engaging YouTube Shorts videos. The system fetches viral content from popular subreddits, processes it through AI narration and video generation, and publishes to YouTube with optimized metadata.
+## Overview
+ShortsGenerator is a Python/FastAPI backend system that automatically converts Reddit stories into engaging short-form videos (Shorts) for platforms like YouTube, TikTok, and Instagram Reels.
 
-## Core Requirements & Goals
+## Core Mission
+Transform text-based Reddit content into visually compelling, narrated short videos with professional subtitles, dynamic backgrounds, and audience-retention features.
 
-### Primary Objectives
-1. **Automated Content Pipeline**: Create a fully automated system that runs continuously with minimal human intervention
-2. **YouTube Shorts Optimization**: Generate vertical format videos (1080x1920) with proper #shorts metadata
-3. **Content Quality**: Ensure videos are engaging with professional narration, subtitles, and visual appeal
-4. **Duplicate Prevention**: Track processed posts to avoid re-using content
-5. **Error Resilience**: Handle failures gracefully with retry logic and comprehensive logging
-6. **YouTube API Integration**: Upload videos with proper titles, descriptions, and tags
+## Target Users
+- Content creators looking to repurpose Reddit stories
+- Social media managers automating content production
+- Individuals wanting to share stories in video format
 
-### Success Metrics
-- High success rate (>80%) for story-to-video conversion
-- Average video duration under 3 minutes (YouTube Shorts limit)
-- Effective duplicate prevention system
-- YouTube upload success with proper metadata
-- Comprehensive logging and statistics tracking
+## Primary Goals
+1. **Automated Pipeline**: Fully automated conversion of Reddit stories to Shorts videos
+2. **High Quality**: Professional-grade visuals, audio, and subtitles
+3. **Scalability**: Efficient processing capable of batch operations
+4. **Customization**: Flexible theming, voice selection, and styling options
+5. **Platform Optimization**: Videos optimized for 9:16 aspect ratio (1080x1920)
 
-## Scope Definition
+## Success Metrics
+- Video generation time under 5 minutes per story
+- Professional audio quality with natural-sounding TTS
+- Accurate word-level subtitle synchronization
+- Engaging visual composition with dynamic backgrounds
+- High audience retention through strategic CTAs and pacing
 
-### In Scope
-- **Execution Flow**: Orchestration of the complete pipeline from story fetching to YouTube upload
-- **Scheduling**: Interval-based execution with configurable timing between cycles
-- **auto_pipeline.py**: Main orchestration engine coordinating all components
-- **Logs**: Comprehensive logging system with file and console output
-- **Statistics**: Tracking success/failure rates, durations, and error types
-- **Configuration**: Settings management via config/settings.py
-- **YouTube Upload**: OAuth2 authentication and video upload integration
-- **Duplicate Prevention**: Post ID tracking in processed_posts.json
+## Scope Boundaries
+### Included
+- Reddit story fetching and processing
+- Text-to-speech narration generation
+- Background video management and sequencing
+- Subtitle generation with word-level highlighting
+- Video composition and effects
+- FastAPI REST API for automation
 
-### Out of Scope
-- **Core Video Generation**: Video composition, TTS, subtitles are treated as black boxes
-- **Background Management**: Background video selection and management
-- **Reddit Client Implementation**: Story fetching is considered working
-- **Image Generation**: Title card creation is considered working
-- **Low-level FFmpeg Operations**: Video processing libraries are assumed functional
+### Excluded
+- Frontend UI development (separate project)
+- Social media publishing automation
+- Monetization or analytics features
+- Deep learning model training
+- Manual video editing interfaces
 
-## Key Constraints
-- **YouTube API Quota**: Limited to ~6 uploads per day (10,000 units)
-- **Video Duration**: Must be under 3 minutes for YouTube Shorts
-- **Content Safety**: Must exclude NSFW content and respect platform terms
-- **Resource Usage**: Video generation is CPU/GPU intensive
-- **Network Reliability**: Must handle intermittent connectivity issues
+## Project Evolution
+Migrated from Remotion/Node.js to Python/FastAPI for better video processing performance and maintainability. Current focus is on core video creation pipeline while maintaining backward compatibility with existing automation workflows.
 
-## Timeline & Milestones
-- **Phase 1**: Single-cycle operation without YouTube upload (Complete)
-- **Phase 2**: YouTube integration with OAuth2 authentication (Complete)
-- **Phase 3**: Continuous operation with interval scheduling (Complete)
-- **Phase 4**: Error handling and retry logic (Complete)
-- **Phase 5**: Statistics tracking and monitoring (Complete)
-- **Phase 6**: Production optimization and scaling (Current Focus)
+## Key Stakeholders
+- **Content Creators**: Primary users needing fast, high-quality video generation
+- **Developers**: Maintaining and extending the video generation engine
+- **Video Platform Algorithms**: Target for optimization (YouTube Shorts, TikTok)
 
-## Stakeholders
-- **Primary User**: Content creator seeking automated YouTube Shorts generation
-- **Technical Operator**: Developer maintaining and monitoring the pipeline
-- **End Viewer**: YouTube audience consuming Shorts content
-
-## Success Criteria
-The pipeline is considered successful when it can:
-1. Run unattended for 24+ hours without crashing
-2. Process 3+ stories per hour successfully
-3. Maintain YouTube upload success rate >90%
-4. Provide comprehensive logs for debugging
-5. Track all statistics for performance monitoring
-6. Prevent duplicate content effectively
+## Technical Vision
+Build a modular, extensible video generation engine that can adapt to evolving platform requirements while maintaining consistent output quality and processing efficiency.

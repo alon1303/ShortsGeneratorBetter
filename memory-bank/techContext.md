@@ -1,324 +1,419 @@
-# Tech Context: ShortsGenerator Automation Pipeline
+# Technical Context: Technologies and Development Setup
 
-## Technologies Used
+## Technology Stack
 
-### Core Technologies
-- **Python 3.8+**: Primary programming language with async/await support
-- **FastAPI**: Web framework for REST API endpoints
-- **Uvicorn**: ASGI server for FastAPI
-- **Pydantic**: Data validation and settings management
-- **Pydantic Settings**: Environment-aware configuration management
+### Core Framework
+- **Python 3.8+**: Primary programming language
+- **FastAPI 0.104.1**: Modern, fast web framework for building APIs
+- **Uvicorn**: ASGI server for running FastAPI applications
 
-### Video & Audio Processing
-- **FFmpeg**: Command-line tool for video/audio processing (via ffmpeg-python)
-- **faster-whisper**: Faster implementation of OpenAI's Whisper for transcription
-- **pysubs2**: Subtitle file generation and manipulation
-- **pydub**: Audio processing and manipulation
-- **av**: Pythonic binding for FFmpeg libraries
+### Video Processing
+- **FFmpeg**: Command-line video processing tool (external dependency)
+- **ffmpeg-python 0.2.0**: Python wrapper for FFmpeg
+- **pydub 0.25.1+**: Audio manipulation library
 
-### Text-to-Speech (TTS)
-- **Edge TTS**: Free Microsoft Edge TTS engine via edge-tts package
-- **ElevenLabs API**: Optional premium TTS (requires API key)
-- **TTS Router**: Custom abstraction layer supporting multiple TTS engines
+### Text-to-Speech
+- **edge-tts 7.0.0+**: Free Microsoft Edge TTS integration
+- **ElevenLabs API**: Premium TTS service (optional, requires API key)
 
-### Content & APIs
-- **Reddit Public JSON Endpoints**: No API keys required for story fetching
-- **YouTube Data API v3**: Video upload and metadata management
-- **Google OAuth2**: Authentication for YouTube API
-- **aiohttp**: Asynchronous HTTP client for API requests
+### Web and HTML Processing
+- **Playwright 1.40.0+**: Browser automation for title card generation
+- **Jinja2 3.1.0+**: Templating engine for HTML generation
+- **html2image 2.0.3+**: HTML to image conversion (legacy, being replaced by Playwright)
 
-### UI & Presentation
-- **Playwright**: Headless browser for HTML-to-image title card generation
-- **Jinja2**: Templating engine for HTML title cards
-- **html2image**: Alternative HTML-to-image conversion
-- **CSS/HTML**: Custom styling for Reddit-style title cards
+### Data Processing and Utilities
+- **pydantic 2.12.0+**: Data validation and settings management
+- **pydantic-settings 2.12.0+**: Settings management with environment variables
+- **python-dotenv 1.2.0+**: Environment variable loading
+- **aiofiles 23.0.0+**: Async file operations
+- **pysubs2 1.6.0+**: Subtitle file manipulation
 
-### Data Management
-- **JSON**: Configuration and state persistence
-- **Pathlib**: Modern file path manipulation
-- **asyncio**: Asynchronous I/O operations
-- **logging**: Comprehensive logging system
+### Testing and Development
+- **pytest**: Testing framework (implicit)
+- **playwright**: Browser automation for testing
+- **faster-whisper 1.2.1**: Whisper transcription (for future expansion)
 
-### Development & Testing
-- **pytest**: Testing framework
-- **pytest-asyncio**: Async test support
-- **black**: Code formatting
-- **mypy**: Type checking
-
-## Development Setup
+## Development Environment Setup
 
 ### Prerequisites
-1. **Python 3.8+** installed and in PATH
-2. **FFmpeg** installed and in PATH (required for video processing)
-3. **Playwright** browsers installed (`playwright install`)
-4. **Git** for version control
+1. **Python 3.8+**: Available on PATH
+2. **FFmpeg**: Installed and available on PATH
+3. **Git**: Version control
+4. **PowerShell**: Recommended terminal on Windows
+5. **Visual Studio Code**: Recommended IDE with Python extension
 
 ### Installation Steps
 ```powershell
-# 1. Navigate to project directory
-cd c:\Projects\sg_automation_dev\backend_v2
+# Clone repository (if not already)
+git clone <repository-url>
+cd sg_video_dev
 
-# 2. Create and activate virtual environment (optional but recommended)
-python -m venv venv
-venv\Scripts\activate
+# Create and activate virtual environment (Windows)
+python -m venv backend_v2/venv
+backend_v2/venv\Scripts\activate
 
-# 3. Install dependencies
+# Install dependencies
+cd backend_v2
 pip install -r requirements.txt
 
-# 4. Install Playwright browsers
+# Install Playwright browsers
 playwright install chromium
-
-# 5. Configure environment variables
-copy .env.example .env
-# Edit .env with your configuration
-
-# 6. Set up YouTube API credentials
-# Obtain client_secrets.json from Google Cloud Console
-# Place in backend_v2/ directory
 ```
 
-### Directory Structure
-```
-sg_automation_dev/
-├── .clinerules/                    # Memory bank documentation
-├── backend_v2/                     # Main application
-│   ├── config/settings.py         # Centralized configuration
-│   ├── reddit_story/              # Reddit story processing
-│   │   ├── reddit_client.py       # Reddit story fetching
-│   │   ├── story_processor.py     # Text splitting and processing
-│   │   ├── tts_router.py          # TTS engine abstraction
-│   │   ├── video_composer.py      # Video generation and composition
-│   │   └── background_manager.py  # Background video management
-│   ├── youtube/uploader.py        # YouTube API integration
-│   ├── auto_pipeline.py           # End-to-end orchestration
-│   ├── main.py                    # FastAPI server
-│   └── requirements.txt           # Dependencies
-├── cache/                         # Cached TTS audio and images
-├── outputs/                       # Generated videos and logs
-└── data/                          # Pipeline state and statistics
+### Environment Configuration
+1. Copy `.env.example` to `.env` in `backend_v2/` directory
+2. Configure any required environment variables (ElevenLabs API key optional)
+3. Default settings work without configuration for basic functionality
+
+## System Dependencies
+
+### FFmpeg Installation
+**Windows (Chocolatey):**
+```powershell
+choco install ffmpeg
 ```
 
-### Environment Variables
-Create `.env` file in `backend_v2/` directory:
-```env
-# Application Settings
-DEBUG=false
-HOST=0.0.0.0
-PORT=8000
+**Windows (Manual):**
+1. Download from https://ffmpeg.org/download.html
+2. Extract to a directory (e.g., `C:\ffmpeg`)
+3. Add `C:\ffmpeg\bin` to PATH
 
-# YouTube API (optional for testing)
-# ELEVENLABS_API_KEY=your_api_key_here
+**Verification:**
+```powershell
+ffmpeg -version
+```
 
-# Reddit Settings (using public endpoints)
-REDDIT_USER_AGENT=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+### Playwright Installation
+```powershell
+# Install Playwright Python package (included in requirements)
+pip install playwright
 
-# TTS Engine (edge or elevenlabs)
-TTS_ENGINE=edge
-DEFAULT_VOICE_ID=en-US-AriaNeural
+# Install browser binaries
+playwright install chromium
+```
+
+## Project Structure
+
+### Key Directories
+```
+sg_video_dev/
+├── backend_v2/                    # Main application
+│   ├── config/                    # Configuration
+│   │   └── settings.py           # Settings management
+│   ├── reddit_story/             # Core video generation
+│   │   ├── models.py             # Data models
+│   │   ├── reddit_client.py      # Reddit API client
+│   │   ├── story_processor.py    # Text processing
+│   │   ├── tts_router.py         # TTS engine router
+│   │   ├── background_manager.py # Background video management
+│   │   ├── subtitle_generator.py # Subtitle generation
+│   │   └── video_composer.py     # Main video composer
+│   ├── assets/                   # Static assets
+│   │   ├── backgrounds/          # Background videos by theme
+│   │   └── sfx/                  # Sound effects
+│   ├── cache/                    # Cache directory
+│   ├── outputs/                  # Generated video output
+│   ├── uploads/                  # Temporary uploads
+│   └── main.py                   # FastAPI application
+├── memory-bank/                  # Project documentation
+└── .clinerules/                  # Cline rules and instructions
+```
+
+### Configuration Files
+- **`backend_v2/config/settings.py`**: Centralized application settings
+- **`backend_v2/.env`**: Environment variables (not in version control)
+- **`backend_v2/requirements.txt`**: Python dependencies
+- **`.gitignore`**: Git ignore rules
+
+## Development Workflow
+
+### Running the Application
+```powershell
+# Activate virtual environment
+backend_v2\venv\Scripts\activate
+
+# Run development server
+cd backend_v2
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# Or run directly
+python main.py
+```
+
+### Testing
+```powershell
+# Run individual test files
+python -m pytest backend_v2/test_video_composer.py -v
+
+# Run all tests
+python -m pytest backend_v2/ -v
+
+# Run with coverage
+python -m pytest backend_v2/ --cov=backend_v2 --cov-report=html
+```
+
+### Code Quality
+```powershell
+# Format code with black
+black backend_v2/
+
+# Sort imports with isort
+isort backend_v2/
+
+# Type checking with mypy (if configured)
+mypy backend_v2/
 ```
 
 ## Technical Constraints
 
-### Platform Constraints
-1. **Windows PowerShell**: All terminal commands must use PowerShell syntax
-2. **FFmpeg Requirement**: Must be installed and accessible in PATH
-3. **YouTube API Quota**: ~10,000 units/day, ~1,600 units per video upload
-4. **Video Duration**: Must be under 3 minutes (180 seconds) for YouTube Shorts
-5. **Video Resolution**: 1080x1920 vertical format required for Shorts
-6. **File Size**: Generated videos can be 50-100MB each
-
 ### Performance Constraints
-1. **Processing Time**: ~2-5 minutes per story depending on length
-2. **Memory Usage**: 500MB-1GB during video processing
-3. **Disk Space**: ~50-100MB per generated video
-4. **Network Dependencies**: Reddit and YouTube API availability
-5. **CPU Usage**: High during FFmpeg video processing
+1. **Video Processing**: CPU-intensive; FFmpeg operations can be slow
+2. **Memory Usage**: Video processing requires significant RAM (500MB+)
+3. **Disk I/O**: Temporary files and video assets require fast storage
+4. **Network**: TTS and Reddit APIs require internet connectivity
 
-### API Limitations
-1. **Reddit Rate Limits**: Public JSON endpoints have implicit rate limits
-2. **YouTube Upload Limits**: ~6 uploads/day within API quota
-3. **TTS Generation**: Edge TTS free tier has no rate limits
-4. **Concurrent Processing**: Single-threaded story processing by design
+### Platform Constraints
+1. **Windows Primary**: Development focused on Windows, but designed to be cross-platform
+2. **FFmpeg Dependency**: Must be installed separately
+3. **Playwright Browsers**: Requires Chromium installation
+4. **Python 3.8+**: Minimum Python version
 
 ### Security Constraints
-1. **OAuth2 Tokens**: Must be stored securely (token.json)
-2. **Client Secrets**: Google Cloud credentials must be protected
-3. **Environment Variables**: Sensitive configuration should use .env files
-4. **File System**: Generated videos contain user content
-
-## Dependencies
-
-### Production Dependencies (from requirements.txt)
-```txt
-# Core Framework
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
-
-# Video Processing
-ffmpeg-python==0.2.0
-faster-whisper==1.2.1
-ctranslate2>=4.0,<5
-onnxruntime>=1.14,<2
-av>=11
-
-# Configuration & Data
-pydantic>=2.12.0
-pydantic-settings>=2.12.0
-python-dotenv>=1.2.0
-filelock>=3.23.0
-
-# Reddit Stories Feature
-aiofiles>=23.0.0
-html2image>=2.0.3
-pysubs2>=1.6.0
-edge-tts>=7.0.0
-
-# Title Card Generation
-jinja2>=3.1.0
-playwright>=1.40.0
-pydub>=0.25.1
-
-# YouTube Integration
-google-api-python-client>=2.0.0
-google-auth-oauthlib>=1.0.0
-google-auth-httplib2>=0.1.0
-google-auth>=2.0.0
-```
-
-### System Dependencies (not in requirements.txt)
-1. **FFmpeg**: Must be installed separately (not a Python package)
-2. **Playwright Browsers**: Installed via `playwright install`
-3. **Python 3.8+**: Modern Python with async features
-4. **Windows/Linux/macOS**: Cross-platform but tested on Windows
-
-### Dependency Management
-- **Virtual Environments**: Recommended for isolation
-- **requirements.txt**: Pinned versions for reproducibility
-- **No Docker**: Currently runs directly on host system
-- **Manual FFmpeg**: Users must install FFmpeg separately
+1. **No Authentication**: Current implementation assumes trusted network
+2. **File Uploads**: Limited validation on uploaded files
+3. **API Keys**: ElevenLabs API key stored in environment variables
+4. **Reddit API**: Uses public endpoints only
 
 ## Tool Usage Patterns
 
-### Command Line Interface (CLI)
-All commands use **PowerShell syntax** on Windows:
+### FFmpeg Usage Patterns
+```python
+# Typical FFmpeg command construction
+cmd = [
+    'ffmpeg',
+    '-y',  # Overwrite output
+    '-i', input_path,
+    '-filter_complex', filter_string,
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-crf', '23',
+    output_path
+]
 
-```powershell
-# Single-cycle pipeline test (no YouTube upload)
-python auto_pipeline.py --single-cycle --no-upload
-
-# Continuous operation with 60-minute intervals
-python auto_pipeline.py --interval 60
-
-# Custom subreddits and settings
-python auto_pipeline.py --subreddits AmItheAsshole tifu --stories 5 --no-upload
-
-# Help and options
-python auto_pipeline.py --help
+# Common operations:
+# 1. Extract clip: -ss START -t DURATION
+# 2. Crop and scale: crop=W:H:X:Y,scale=W:H
+# 3. Concatenate: -f concat -i filelist.txt -c copy
+# 4. Add subtitles: subtitles=file.ass
 ```
 
-### Development Commands
-```powershell
-# Run FastAPI development server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+### Async Programming Patterns
+```python
+# FastAPI async endpoints
+@app.post("/generate/reddit-story")
+async def generate_reddit_story(request: RedditStoryRequest):
+    # Async processing
+    pass
 
-# Run tests
-python test_imports.py
-python test_reddit_client.py
-python test_youtube_compatibility.py
+# Background tasks
+background_tasks.add_task(process_reddit_story_background, job_id, request)
 
-# Check dependencies
-python -m pip list
+# Async file operations
+async with aiofiles.open(file_path, 'rb') as f:
+    content = await f.read()
 ```
 
-### Logging & Monitoring
-- **Log Location**: `outputs/auto_pipeline.log`
-- **Console Output**: Real-time progress and errors
-- **Statistics**: `data/pipeline_stats.json`
-- **Cycle Results**: `data/pipeline/cycle_*.json`
+### Error Handling Patterns
+```python
+try:
+    # Operation that may fail
+    result = await some_async_operation()
+except SpecificError as e:
+    logger.error(f"Operation failed: {e}")
+    raise HTTPException(status_code=500, detail=str(e))
+except Exception as e:
+    logger.exception("Unexpected error")
+    raise
+```
 
-### Testing Patterns
-1. **Unit Tests**: Individual component testing with mocks
-2. **Integration Tests**: Full pipeline with `--no-upload` flag
-3. **Manual Testing**: Single-cycle operation for validation
-4. **Cleanup**: Test files deleted after running tests
+### Configuration Patterns
+```python
+# Settings loading
+from config.settings import settings
 
-## Development Workflow
+# Usage
+output_dir = settings.OUTPUT_DIR
+target_width = settings.TARGET_WIDTH
 
-### Typical Development Session
-1. **Start**: Read memory bank files for context
-2. **Test**: Run verification tests (`python test_imports.py`)
-3. **Develop**: Make changes to execution flow, scheduling, or auto_pipeline.py
-4. **Test**: Run single-cycle pipeline with `--no-upload`
-5. **Verify**: Check logs and generated videos
-6. **Document**: Update memory bank if needed
-7. **Cleanup**: Delete test files and outputs
+# Environment variable override
+# Set REDDIT_USER_AGENT in .env or environment
+```
 
-### Code Style & Standards
-- **Async-first**: Use asyncio for all I/O operations
-- **Type Hints**: Comprehensive type annotations
-- **Modular Design**: Clear separation of concerns
-- **Error Handling**: Graceful degradation and retry logic
-- **Logging**: Comprehensive at INFO level, DEBUG for troubleshooting
+## Integration Points
 
-### Debugging Patterns
-1. **Enable Debug Logging**: Set logging level to DEBUG
-2. **Check Logs**: Review `outputs/auto_pipeline.log`
-3. **Single Story Mode**: Process one story at a time
-4. **No Upload Mode**: Test without YouTube API
-5. **Clean Cache**: Clear `cache/` directory if TTS issues
+### External APIs
+1. **Reddit Public JSON**: No API keys required, uses public endpoints
+2. **Edge TTS**: Free Microsoft service, no authentication
+3. **ElevenLabs**: Premium service, requires API key
+4. **Future**: Social media APIs for direct posting
+
+### File System Integration
+1. **Background Videos**: Read from assets/backgrounds/
+2. **Cache Storage**: Store TTS audio and metadata
+3. **Output Generation**: Write videos to outputs/
+4. **Temporary Files**: Create and clean up temp files
+
+### Process Management
+1. **Subprocess Management**: FFmpeg process control
+2. **Async Task Management**: Background job processing
+3. **Resource Cleanup**: Temporary file deletion
+4. **Error Recovery**: Process restart and cleanup
 
 ## Deployment Considerations
 
-### Local Development
-- **Requirements**: Python 3.8+, FFmpeg, dependencies
-- **Setup**: One-time installation of system dependencies
-- **Testing**: Local pipeline runs with test videos
-- **Monitoring**: Log files and console output
+### Development Deployment
+- **Local Server**: Uvicorn with auto-reload
+- **Virtual Environment**: Isolated Python environment
+- **Environment Variables**: Local .env file
 
-### Production Server
-- **Headless Operation**: No GUI required
-- **Stable Internet**: Reddit/YouTube API access
-- **Sufficient Storage**: ~10GB for videos and cache
-- **Monitoring**: Log rotation and disk space monitoring
-- **Backup**: Configuration files and credentials
+### Production Deployment
+- **Process Manager**: Gunicorn with Uvicorn workers
+- **Reverse Proxy**: Nginx or similar
+- **Environment Variables**: System or container environment
+- **Logging**: Structured JSON logging
+- **Monitoring**: Health checks and metrics
 
-### Scaling Limitations
-- **Single Instance**: Designed for single-server operation
-- **YouTube Quota**: Primary limiting factor (6 uploads/day)
-- **Processing Capacity**: ~3 stories/hour per instance
-- **State Management**: JSON files, not distributed
+### Containerization (Future)
+```dockerfile
+# Example Dockerfile structure
+FROM python:3.11-slim
+RUN apt-get update && apt-get install -y ffmpeg
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
 
-## Common Issues & Solutions
+## Testing Strategy
 
-### YouTube Authentication Issues
-1. **Problem**: `client_secrets.json` not found
-   **Solution**: Obtain from Google Cloud Console and place in `backend_v2/`
-2. **Problem**: OAuth2 token expired
-   **Solution**: Delete `youtube/token.json` and re-authenticate
-3. **Problem**: Quota exceeded
-   **Solution**: Wait 24 hours or request quota increase
+### Unit Tests
+- **Component Testing**: Test individual components in isolation
+- **Mock External Dependencies**: Mock FFmpeg, TTS, and Reddit APIs
+- **Data Validation**: Test data models and validation
 
-### Video Processing Issues
-1. **Problem**: FFmpeg not found
-   **Solution**: Install FFmpeg and ensure it's in PATH
-2. **Problem**: Video generation fails
-   **Solution**: Check disk space and permissions
-3. **Problem**: Memory errors
-   **Solution**: Reduce concurrent processing or increase system memory
+### Integration Tests
+- **Component Integration**: Test how components work together
+- **API Endpoints**: Test HTTP endpoints
+- **File Operations**: Test file system interactions
 
-### Reddit Fetching Issues
-1. **Problem**: No stories fetched
-   **Solution**: Check internet connection and subreddit names
-2. **Problem**: Rate limited
-   **Solution**: Add delays between requests
-3. **Problem**: NSFW content
-   **Solution**: Ensure `EXCLUDE_NSFW=true` in settings
+### End-to-End Tests
+- **Full Pipeline**: Test complete video generation
+- **Error Conditions**: Test failure scenarios
+- **Performance Testing**: Test with realistic data sizes
 
-### TTS Issues
-1. **Problem**: Audio not generated
-   **Solution**: Check Edge TTS installation and network
-2. **Problem**: Wrong voice
-   **Solution**: Verify voice ID in settings
-3. **Problem**: Timing data missing
-   **Solution**: Clear cache and regenerate
+### Test Data Management
+- **Test Files**: Create and clean up test files
+- **Mock Assets**: Use minimal test assets
+- **Isolated Environments**: Each test runs in isolation
+
+## Performance Optimization
+
+### Identified Bottlenecks
+1. **FFmpeg Processing**: Video encoding is CPU-intensive
+2. **TTS Generation**: Network latency for remote TTS
+3. **File I/O**: Reading/writing large video files
+4. **Memory Usage**: Video processing buffers
+
+### Optimization Strategies
+1. **Parallel Processing**: Process multiple videos concurrently
+2. **Caching**: Cache TTS results and video metadata
+3. **Efficient Encoding**: Use FFmpeg presets optimized for speed
+4. **Memory Management**: Stream processing where possible
+
+### Monitoring Metrics
+1. **Processing Time**: Time per video segment
+2. **Memory Usage**: Peak memory during processing
+3. **CPU Utilization**: FFmpeg CPU usage
+4. **Disk I/O**: Read/write throughput
+
+## Troubleshooting Guide
+
+### Common Issues
+
+#### FFmpeg Not Found
+```
+Error: FileNotFoundError: [WinError 2] The system cannot find the file specified
+```
+**Solution**: Ensure FFmpeg is installed and in PATH
+
+#### Playwright Browser Issues
+```
+Error: Browser chromium not found
+```
+**Solution**: Run `playwright install chromium`
+
+#### TTS Generation Failure
+```
+Error: edge_tts.CommunicationError: Connection failed
+```
+**Solution**: Check internet connection and retry
+
+#### Memory Errors
+```
+Error: MemoryError or slow processing
+```
+**Solution**: Reduce concurrent processes, increase system RAM
+
+#### Video Output Issues
+```
+Error: Output file empty or corrupted
+```
+**Solution**: Check FFmpeg command syntax, verify input files
+
+### Debugging Commands
+```powershell
+# Check FFmpeg installation
+ffmpeg -version
+
+# Check Python environment
+python --version
+pip list | findstr "fastapi ffmpeg"
+
+# Check Playwright
+python -c "import playwright; print(playwright.__version__)"
+
+# Run with debug logging
+uvicorn main:app --reload --log-level debug
+```
+
+### Log Analysis
+- **Application Logs**: Check for error messages and stack traces
+- **FFmpeg Logs**: Check stderr output from FFmpeg commands
+- **API Logs**: Check FastAPI access and error logs
+- **System Logs**: Check system resource usage
+
+## Development Guidelines
+
+### Code Style
+- **PEP 8**: Follow Python style guide
+- **Type Hints**: Use type annotations for all functions
+- **Docstrings**: Include docstrings for all public functions
+- **Error Handling**: Use explicit exception handling
+
+### Git Workflow
+- **Feature Branches**: Create branches for new features
+- **Commit Messages**: Use descriptive commit messages
+- **Pull Requests**: Review before merging to main
+- **Testing**: Run tests before committing
+
+### Documentation
+- **Code Comments**: Explain complex logic
+- **API Documentation**: Keep FastAPI endpoint docs updated
+- **Memory Bank**: Update after significant changes
+- **README**: Keep project README current
+
+### Security Best Practices
+- **Input Validation**: Validate all user inputs
+- **File Operations**: Sanitize file paths
+- **Environment Variables**: Store secrets in .env
+- **Dependency Updates**: Keep dependencies updated

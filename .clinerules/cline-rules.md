@@ -1,5 +1,3 @@
-You are operating in the Automation Pipeline branch.
-Your strictly defined scope is the execution flow, scheduling, auto_pipeline.py, and logs.
-Treat the core video generation code as a black box that already works.
-If you run tests make sure to delete the test files later.
+You are operating in the Video Generation branch using a Git Worktree. Your strictly defined scope is the core logic of video creation (TTS, backgrounds, subtitles, compositing). Do NOT modify automation pipeline files. Rely on the memory-bank for architecture specifics.
+If you run test make sure to delete the test files after.
 If you run commands in the terminal make sure you run them in POWERSHELL SYNTAX.
