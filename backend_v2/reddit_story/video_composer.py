@@ -389,12 +389,12 @@ class VideoComposer:
                 shutil.rmtree(temp_dir, ignore_errors=True)
             return False
     
-    def apply_1_5x_speed(self, input_path: Path, output_path: Path) -> bool:
+    def apply_1_4x_speed(self, input_path: Path, output_path: Path) -> bool:
         try:
             cmd = [
                 'ffmpeg', '-y',
                 '-i', str(input_path),
-                '-filter_complex', '[0:v]setpts=0.66*PTS[v];[0:a]atempo=1.5[a]',
+                '-filter_complex', '[0:v]setpts=0.714*PTS[v];[0:a]atempo=1.4[a]',
                 '-map', '[v]', '-map', '[a]',
                 '-c:v', 'libx264',
                 '-preset', 'veryfast',
@@ -402,18 +402,18 @@ class VideoComposer:
                 str(output_path)
             ]
             result = subprocess.run(cmd, capture_output=True, text=True)
-            
+
             if result.returncode != 0:
-                logger.error(f"FFmpeg 1.5x speed failed: {result.stderr}")
+                logger.error(f"FFmpeg 1.4x speed failed: {result.stderr}")
                 return False
-                
+
             if not output_path.exists() or output_path.stat().st_size == 0:
-                logger.error("1.5x speed output file empty or missing.")
+                logger.error("1.4x speed output file empty or missing.")
                 return False
-                
+
             return True
         except Exception as e:
-            logger.error(f"Error applying 1.5x speed: {e}")
+            logger.error(f"Error applying 1.4x speed: {e}")
             return False
     
     def create_video_part(
@@ -510,8 +510,17 @@ class VideoComposer:
             if not success:
                 raise RuntimeError("Failed to combine audio with background")
         
-        logger.info(f"Video part created successfully: {output_path}")
-        return output_path
+        # Apply 1.4x speed post-processing
+        final_speed_path = output_path.parent / f"{output_path.stem}_1_4x{output_path.suffix}"
+        speed_success = self.apply_1_4x_speed(output_path, final_speed_path)
+        
+        if speed_success and final_speed_path.exists() and final_speed_path.stat().st_size > 0:
+            final_return_path = final_speed_path
+        else:
+            final_return_path = output_path
+            
+        logger.info(f"Video part created successfully: {final_return_path}")
+        return final_return_path
     
     def concatenate_videos(
         self,
@@ -660,15 +669,6 @@ class VideoComposer:
             if not output_path.exists() or output_path.stat().st_size == 0:
                 raise RuntimeError(f"Final video not created: {output_path}")
 
-            # Apply 1.5x speed post-processing
-            final_speed_path = output_path.parent / f"{output_path.stem}_1_5x{output_path.suffix}"
-            speed_success = self.apply_1_5x_speed(output_path, final_speed_path)
-            
-            if speed_success and final_speed_path.exists() and final_speed_path.stat().st_size > 0:
-                final_return_path = final_speed_path
-            else:
-                final_return_path = output_path
-
             # Get video metadata
             try:
                 cmd = [
@@ -676,15 +676,15 @@ class VideoComposer:
                     '-v', 'quiet',
                     '-show_entries', 'format=duration',
                     '-of', 'default=noprint_wrappers=1:nokey=1',
-                    str(final_return_path)
+                    str(output_path)
                 ]
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 duration = float(result.stdout.strip()) if result.stdout else 0
-                logger.info(f"Final video created: {final_return_path} ({duration:.1f}s)")
+                logger.info(f"Final video created: {output_path} ({duration:.1f}s)")
             except Exception as e:
                 logger.warning(f"Could not get final video duration: {e}")
 
-            return final_return_path
+            return output_path
     
     def create_separate_video_parts(
         self,

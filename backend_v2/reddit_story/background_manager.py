@@ -280,19 +280,31 @@ class BackgroundManager:
         """
         metadata = self.get_video_metadata(video_path)
         video_duration = metadata.get('duration_seconds', 0)
-        
+
+        if "gta" in str(video_path).lower():
+            # Specific start times requested by user: 00:04, 00:43, 07:43
+            gta_start_times = [4.0, 43.0, 463.0]
+            
+            # Filter valid start times based on clip duration to prevent errors
+            valid_times = [t for t in gta_start_times if t + clip_duration <= video_duration]
+            
+            if valid_times:
+                start_time = random.choice(valid_times)
+                logger.debug(f"Selected specific GTA start time: {start_time}s")
+                return start_time
+
         if video_duration <= clip_duration:
             # Video is shorter than or equal to desired clip duration
             return 0.0
-        
+
         # Calculate maximum start time (video duration - clip duration)
         max_start = video_duration - clip_duration
-        
+
         # Generate random start time
         start_time = random.uniform(0.0, max_start)
-        
+
         logger.debug(f"Random start time for {clip_duration:.1f}s clip: {start_time:.1f}s (video duration: {video_duration:.1f}s)")
-        
+
         return start_time
     
     def extract_video_clip(
