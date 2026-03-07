@@ -4,6 +4,7 @@ Handles environment variables, default values, and validation.
 """
 
 import os
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from pydantic import Field, validator
@@ -33,6 +34,7 @@ class Settings(BaseSettings):
     BASE_DIR: Path = Path(__file__).parent.parent
     UPLOAD_DIR: Path = BASE_DIR / "uploads"
     OUTPUT_DIR: Path = BASE_DIR / "outputs"
+    DATA_DIR: Path = BASE_DIR / "data"
     CACHE_DIR: Path = BASE_DIR / "cache"
     ASSETS_DIR: Path = BASE_DIR / "assets"
     BACKGROUNDS_DIR: Path = ASSETS_DIR / "backgrounds"
@@ -59,7 +61,24 @@ class Settings(BaseSettings):
     ELEVENLABS_VOICE_ADAM: str = "pNInz6obpgDQGcFmaJgB"    # Deep male
     ELEVENLABS_VOICE_ELLI: str = "MF3mGyEYCl7XYWbV9V6O"    # Young female
     ELEVENLABS_VOICE_JOSH: str = "TxGEqnHWrfWFTfGW9XjX"    # Casual male
-    DEFAULT_VOICE_ID: str = ELEVENLABS_VOICE_RACHEL
+    
+    # Edge TTS Voices (for TTS_ENGINE = "edge")
+    EDGE_TTS_VOICE_FEMALE: str = "en-US-AriaNeural"        # Female voice
+    EDGE_TTS_VOICE_MALE: str = "en-US-ChristopherNeural"   # Male voice
+    
+    DEFAULT_VOICE_ID: str = EDGE_TTS_VOICE_FEMALE  # Default to female Edge TTS voice
+    
+    # Edge TTS alias mapping for get_voice_id method
+    EDGE_TTS_ALIASES: Dict[str, str] = Field(
+        default_factory=lambda: {
+            "female": "en-US-AriaNeural",
+            "male": "en-US-ChristopherNeural", 
+            "aria": "en-US-AriaNeural",
+            "christopher": "en-US-ChristopherNeural",
+            "default": "en-US-AriaNeural",
+        },
+        description="Mapping of voice aliases to Edge TTS voice IDs"
+    )
     
     # TTS Engine Configuration
     TTS_ENGINE: str = "edge"  # "edge" or "elevenlabs"
@@ -92,7 +111,7 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
         case_sensitive = False
     
-    @validator("UPLOAD_DIR", "OUTPUT_DIR", "CACHE_DIR", "ASSETS_DIR", "BACKGROUNDS_DIR", pre=True)
+    @validator("UPLOAD_DIR", "OUTPUT_DIR", "DATA_DIR", "CACHE_DIR", "ASSETS_DIR", "BACKGROUNDS_DIR", pre=True)
     def validate_and_create_dirs(cls, v: Path) -> Path:
         """Validate and create directories if they don't exist."""
         if isinstance(v, str):
@@ -173,17 +192,45 @@ class Settings(BaseSettings):
         return bool(self.ELEVENLABS_API_KEY)
     
     def get_voice_id(self, voice_name: Optional[str] = None) -> str:
-        """Get voice ID by name or return default."""
-        voice_map = {
-            "rachel": self.ELEVENLABS_VOICE_RACHEL,
-            "adam": self.ELEVENLABS_VOICE_ADAM,
-            "elli": self.ELEVENLABS_VOICE_ELLI,
-            "josh": self.ELEVENLABS_VOICE_JOSH,
-        }
+        """
+        Get voice ID by name or return default.
+        Returns appropriate voice ID based on TTS_ENGINE setting.
+        """
+        # Determine which voice map to use based on TTS engine
+        if self.TTS_ENGINE.lower() == "edge":
+            if voice_name:
+                voice_lower = voice_name.lower()
+                # Check if it's a known alias
+                if voice_lower in self.EDGE_TTS_ALIASES:
+                    return self.EDGE_TTS_ALIASES[voice_lower]
+                # Check if it's already a valid Edge TTS voice ID (contains "Neural")
+                elif "neural" in voice_lower or "en-" in voice_lower:
+                    return voice_name  # Assume it's already a valid Edge TTS voice ID
+            # Return default Edge TTS voice
+            return self.DEFAULT_VOICE_ID
+            
+        elif self.TTS_ENGINE.lower() == "elevenlabs":
+            # ElevenLabs voice mapping
+            elevenlabs_voice_map = {
+                "rachel": self.ELEVENLABS_VOICE_RACHEL,
+                "adam": self.ELEVENLABS_VOICE_ADAM,
+                "elli": self.ELEVENLABS_VOICE_ELLI,
+                "josh": self.ELEVENLABS_VOICE_JOSH,
+            }
+            
+            if voice_name and voice_name.lower() in elevenlabs_voice_map:
+                return elevenlabs_voice_map[voice_name.lower()]
+            # Return default ElevenLabs voice (if configured) or fallback
+            if self.is_elevenlabs_configured():
+                return self.ELEVENLABS_VOICE_RACHEL
+            else:
+                # Fall back to Edge TTS if ElevenLabs not configured
+                logger = logging.getLogger(__name__)
+                logger.warning("ElevenLabs not configured, falling back to Edge TTS")
+                self.TTS_ENGINE = "edge"
+                return self.EDGE_TTS_VOICE_FEMALE
         
-        if voice_name and voice_name.lower() in voice_map:
-            return voice_map[voice_name.lower()]
-        
+        # Default case (shouldn't happen)
         return self.DEFAULT_VOICE_ID
     
     def to_dict(self) -> Dict[str, Any]:
@@ -237,6 +284,7 @@ settings = Settings()
 # Create necessary directories
 settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 settings.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
 settings.CACHE_DIR.mkdir(parents=True, exist_ok=True)
 settings.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 settings.BACKGROUNDS_DIR.mkdir(parents=True, exist_ok=True)

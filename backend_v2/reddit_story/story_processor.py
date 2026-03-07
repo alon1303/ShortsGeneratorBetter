@@ -288,17 +288,19 @@ class StoryProcessor:
         return parts
     
     def process_story(
-        self, 
-        story: RedditStory, 
-        strategy: SplitStrategy = SplitStrategy.HYBRID
+        self,
+        story: RedditStory,
+        strategy: SplitStrategy = SplitStrategy.HYBRID,
+        split_into_parts: bool = True
     ) -> ProcessedStory:
         """
         Process a Reddit story by splitting it into logical parts.
-        
+
         Args:
             story: RedditStory object to process
             strategy: Splitting strategy to use
-            
+            split_into_parts: Whether to split the story into multiple parts
+
         Returns:
             ProcessedStory object with parts
         """
@@ -306,11 +308,48 @@ class StoryProcessor:
             f"Processing story: '{story.title[:50]}...' "
             f"({story.word_count} words, {story.estimated_duration:.1f}s)"
         )
+
+        # Evaluate whether to split
+        should_split = split_into_parts and story.estimated_duration > 180.0
         
+        if not should_split:
+            logger.info(
+                f"Story duration ({story.estimated_duration:.1f}s) <= 180s or split_into_parts=False. "
+                f"Returning single part."
+            )
+            
+            # Create a single StoryPart with the entire text
+            text = story.text
+            word_count = len(text.split())
+            duration = story.estimated_duration
+            
+            single_part = StoryPart(
+                part_number=1,
+                text=text,
+                word_count=word_count,
+                estimated_duration=duration,
+                start_index=0,
+                end_index=len(text),
+            )
+            
+            processed_story = ProcessedStory(
+                story=story,
+                parts=[single_part],
+                total_parts=1,
+                total_duration=duration,
+                strategy_used=strategy,
+            )
+            
+            logger.info(
+                f"Story processed as single part, duration: {duration:.1f}s"
+            )
+            
+            return processed_story
+
         # Use only story text (title is handled separately in audio generation pipeline)
         text = story.text
         original_length = len(text)
-        
+
         # Step 1: Initial segmentation based on strategy
         if strategy == SplitStrategy.PARAGRAPH:
             segments = self._split_into_paragraphs(text)
@@ -318,7 +357,7 @@ class StoryProcessor:
             segments = self._split_into_sentences(text)
         else:  # HYBRID - start with paragraphs
             segments = self._split_into_paragraphs(text)
-        
+
         # Calculate start indices for each segment
         start_indices = []
         current_pos = 0
@@ -329,13 +368,13 @@ class StoryProcessor:
                 index = current_pos
             start_indices.append(index)
             current_pos = index + len(segment)
-        
+
         # Step 2: Merge small segments
         segments, start_indices = self._merge_small_segments(segments, start_indices)
-        
+
         # Step 3: Split large segments
         segments, start_indices = self._split_large_segments(segments, start_indices)
-        
+
         # Step 4: Apply max parts limit
         if len(segments) > self.max_parts:
             logger.warning(
@@ -343,13 +382,13 @@ class StoryProcessor:
             )
             segments = segments[:self.max_parts]
             start_indices = start_indices[:self.max_parts]
-        
+
         # Step 5: Create StoryPart objects
         parts = self._create_story_parts(segments, start_indices)
-        
+
         # Step 6: Calculate totals
         total_duration = sum(part.estimated_duration for part in parts)
-        
+
         # Verify we processed the entire text
         processed_length = sum(len(part.text) for part in parts)
         if processed_length < original_length * 0.9:  # Allow 10% difference for whitespace
@@ -357,7 +396,7 @@ class StoryProcessor:
                 f"Processed text length ({processed_length}) is significantly "
                 f"less than original ({original_length})"
             )
-        
+
         processed_story = ProcessedStory(
             story=story,
             parts=parts,
@@ -365,19 +404,19 @@ class StoryProcessor:
             total_duration=total_duration,
             strategy_used=strategy,
         )
-        
+
         logger.info(
             f"Story processed into {len(parts)} parts, "
             f"total duration: {total_duration:.1f}s"
         )
-        
+
         for i, part in enumerate(parts, 1):
             logger.debug(
                 f"  Part {i}: {part.word_count} words, "
                 f"{part.estimated_duration:.1f}s, "
                 f"text: '{part.text[:50]}...'"
             )
-        
+
         return processed_story
     
     def validate_parts(self, processed_story: ProcessedStory) -> bool:

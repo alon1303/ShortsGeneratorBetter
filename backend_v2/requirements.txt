@@ -12,7 +12,6 @@ av>=11
 filelock>=3.23.0
 
 # Reddit Stories Feature Dependencies
-asyncpraw>=7.7.0
 aiofiles>=23.0.0
 html2image>=2.0.3
 pysubs2>=1.6.0
@@ -22,3 +21,9 @@ edge-tts>=7.0.0
 jinja2>=3.1.0
 playwright>=1.40.0
 pydub>=0.25.1
+
+# Google API Dependencies for YouTube Upload
+google-api-python-client>=2.0.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.1.0
+google-auth>=2.0.0
