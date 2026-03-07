@@ -349,6 +349,9 @@ async def process_reddit_story_background(job_id: str, request: RedditStoryReque
         
         logger.info(f"Starting Reddit story processing for job {job_id}")
         
+        # Initialize Reddit client for duplicate prevention and multi-subreddit fetching
+        reddit_client = RedditClient()
+        
         # Step 1: Get or create Reddit story
         story = None
         if request.story_url:
@@ -356,7 +359,6 @@ async def process_reddit_story_background(job_id: str, request: RedditStoryReque
             _jobs[job_id]["message"] = "Fetching story from Reddit URL..."
             _jobs[job_id]["progress"] = 0.2
             
-            reddit_client = RedditClient()
             story = await reddit_client.fetch_story_from_url(request.story_url)
             
             if not story:
@@ -382,11 +384,11 @@ async def process_reddit_story_background(job_id: str, request: RedditStoryReque
                 estimated_duration=len(request.story_text.split()) / 150 * 60,  # 150 WPM
             )
         elif request.subreddit:
-            # Fetch trending story from subreddit
+            # Fetch trending story from subreddit using new multi-subreddit support
             _jobs[job_id]["message"] = f"Fetching trending story from r/{request.subreddit}..."
             _jobs[job_id]["progress"] = 0.2
             
-            reddit_client = RedditClient()
+            # Use the new multi-subreddit fetching (backward compatible with single subreddit)
             stories = await reddit_client.fetch_trending_stories(
                 subreddit=request.subreddit,
                 time_filter="day",
@@ -395,6 +397,7 @@ async def process_reddit_story_background(job_id: str, request: RedditStoryReque
                 min_text_length=200,
                 max_text_length=5000,
                 exclude_nsfw=True,
+                exclude_processed=True,  # Enable duplicate prevention
             )
             
             if not stories:
@@ -561,7 +564,13 @@ async def process_reddit_story_background(job_id: str, request: RedditStoryReque
         if not video_parts:
             raise ValueError("Failed to create video parts")
         
-        # Step 5: Update job status
+        # Step 7: Mark post as processed (duplicate prevention) if it's a real Reddit post
+        # Only mark posts that have Reddit URLs (not custom stories)
+        if story.url and story.url.startswith("https://reddit.com"):
+            reddit_client.mark_post_as_processed(story.id)
+            logger.info(f"Marked post {story.id} as processed in duplicate prevention system")
+        
+        # Step 8: Update job status
         _jobs[job_id]["status"] = "completed"
         _jobs[job_id]["progress"] = 1.0
         _jobs[job_id]["message"] = f"Reddit story video parts created successfully: {len(video_parts)} parts"

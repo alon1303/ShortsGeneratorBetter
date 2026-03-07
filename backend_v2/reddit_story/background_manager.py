@@ -359,7 +359,7 @@ class BackgroundManager:
             logger.info(f"Extracting clip: {start_time:.1f}s + {duration:.1f}s from {video_path.name}")
             logger.info(f"Original: {original_width}x{original_height}, Crop: {crop_width}x{crop_height}, Offset: ({x_offset}, {y_offset})")
             
-            # Build ffmpeg command
+            # Build ffmpeg command with YouTube-compatible settings
             cmd = [
                 'ffmpeg',
                 '-y',  # Overwrite output file
@@ -372,6 +372,7 @@ class BackgroundManager:
                 '-c:v', 'libx264',  # Video codec
                 '-preset', 'veryfast',  # Encoding speed
                 '-crf', '23',  # Quality
+                '-pix_fmt', 'yuv420p',  # Required for YouTube compatibility
                 '-c:a', 'aac',  # Audio codec
                 '-b:a', '128k',  # Audio bitrate
                 '-movflags', '+faststart',  # Enable streaming

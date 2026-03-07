@@ -351,6 +351,7 @@ def reframe_to_916_with_subtitles(input_path: str, output_path: str, subtitle_pa
                 vcodec='libx264',
                 crf=23,  # Good quality balance (0-51, lower is better)
                 preset='veryfast',  # Fast processing as requested
+                pix_fmt='yuv420p',  # Required for YouTube compatibility
                 acodec='aac',  # Standard audio codec
                 audio_bitrate='128k',
                 movflags='+faststart',  # Enable streaming
