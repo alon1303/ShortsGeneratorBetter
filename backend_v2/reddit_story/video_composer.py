@@ -351,6 +351,7 @@ class VideoComposer:
                 '-c:v', 'libx264',
                 '-preset', 'veryfast',
                 '-crf', '23',
+                '-pix_fmt', 'yuv420p',  # Required for YouTube compatibility
                 '-c:a', 'aac',
                 '-b:a', '128k',
                 '-t', str(audio_duration),  # Hard-stop at audio duration (needed with -stream_loop -1)
@@ -523,15 +524,20 @@ class VideoComposer:
                 filelist_path = Path(f.name)
             
             try:
-                # Build ffmpeg command for concatenation
+                # Build ffmpeg command for concatenation with YouTube-compatible encoding
                 cmd = [
                     'ffmpeg',
                     '-y',
                     '-f', 'concat',
                     '-safe', '0',
                     '-i', str(filelist_path),
-                    '-c', 'copy',  # Copy codec (fast, no re-encoding)
-                    '-movflags', '+faststart',
+                    '-c:v', 'libx264',  # Re-encode video for YouTube compatibility
+                    '-preset', 'veryfast',
+                    '-crf', '23',
+                    '-pix_fmt', 'yuv420p',  # Required for YouTube compatibility
+                    '-c:a', 'aac',  # Standard audio codec for YouTube
+                    '-b:a', '128k',
+                    '-movflags', '+faststart',  # Move moov atom to beginning for streaming
                     str(output_path)
                 ]
                 
