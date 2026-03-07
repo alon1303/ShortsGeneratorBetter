@@ -346,7 +346,7 @@ class VideoComposer:
                 # No overlay, audio is at input index 1
                 cmd.extend(['-map', '1:a'])
             
-            # Final output settings - YouTube compatible encoding
+            # Final output settings
             cmd.extend([
                 '-c:v', 'libx264',
                 '-preset', 'veryfast',
@@ -355,7 +355,7 @@ class VideoComposer:
                 '-c:a', 'aac',
                 '-b:a', '128k',
                 '-t', str(audio_duration),  # Hard-stop at audio duration (needed with -stream_loop -1)
-                '-movflags', '+faststart',  # Move moov atom to beginning for streaming
+                '-movflags', '+faststart',
                 output_path.name
             ])
             
