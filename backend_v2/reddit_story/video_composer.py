@@ -390,12 +390,15 @@ class VideoComposer:
                 shutil.rmtree(temp_dir, ignore_errors=True)
             return False
     
-    def apply_1_4x_speed(self, input_path: Path, output_path: Path) -> bool:
+    def apply_speed_multiplier(self, input_path: Path, output_path: Path, speed_multiplier: float) -> bool:
         try:
+            # Calculate PTS (Presentation Time Stamp) which is inverse of speed
+            pts_value = 1.0 / speed_multiplier
+            
             cmd = [
                 'ffmpeg', '-y',
                 '-i', str(input_path),
-                '-filter_complex', '[0:v]setpts=0.714*PTS[v];[0:a]atempo=1.4[a]',
+                '-filter_complex', f'[0:v]setpts={pts_value:.4f}*PTS[v];[0:a]atempo={speed_multiplier}[a]',
                 '-map', '[v]', '-map', '[a]',
                 '-c:v', 'libx264',
                 '-preset', 'veryfast',
@@ -405,18 +408,17 @@ class VideoComposer:
             result = subprocess.run(cmd, capture_output=True, text=True)
 
             if result.returncode != 0:
-                logger.error(f"FFmpeg 1.4x speed failed: {result.stderr}")
+                logger.error(f"FFmpeg {speed_multiplier}x speed failed: {result.stderr}")
                 return False
 
             if not output_path.exists() or output_path.stat().st_size == 0:
-                logger.error("1.4x speed output file empty or missing.")
+                logger.error(f"{speed_multiplier}x speed output file empty or missing.")
                 return False
 
             return True
         except Exception as e:
-            logger.error(f"Error applying 1.4x speed: {e}")
+            logger.error(f"Error applying {speed_multiplier}x speed: {e}")
             return False
-    
     def create_video_part(
         self,
         audio_chunk: AudioChunk,
@@ -511,12 +513,18 @@ class VideoComposer:
             if not success:
                 raise RuntimeError("Failed to combine audio with background")
         
-        # Apply 1.4x speed post-processing
-        final_speed_path = output_path.parent / f"{output_path.stem}_1_4x{output_path.suffix}"
-        speed_success = self.apply_1_4x_speed(output_path, final_speed_path)
         
-        if speed_success and final_speed_path.exists() and final_speed_path.stat().st_size > 0:
-            final_return_path = final_speed_path
+        # Apply dynamic speed post-processing
+        speed_multiplier = getattr(settings, 'FINAL_VIDEO_SPEED', 1.4)
+        
+        if speed_multiplier != 1.0:
+            final_speed_path = output_path.parent / f"{output_path.stem}_{speed_multiplier}x{output_path.suffix}"
+            speed_success = self.apply_speed_multiplier(output_path, final_speed_path, speed_multiplier)
+            
+            if speed_success and final_speed_path.exists() and final_speed_path.stat().st_size > 0:
+                final_return_path = final_speed_path
+            else:
+                final_return_path = output_path
         else:
             final_return_path = output_path
             

@@ -96,6 +96,7 @@ class Settings(BaseSettings):
     VIDEO_CRF: int = 23  # Quality (0-51, lower is better)
     VIDEO_PRESET: str = "veryfast"
     AUDIO_BITRATE: str = "128k"
+    FINAL_VIDEO_SPEED: float = 1.0  # Dynamic video speed multiplier
     
     # Story segmentation
     MIN_PART_DURATION: int = 30  # seconds
