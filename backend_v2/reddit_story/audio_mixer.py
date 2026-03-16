@@ -75,16 +75,6 @@ class AudioMixer:
     ) -> Optional[Path]:
         """
         Mix title audio with pop sound effect at specified time.
-        
-        Args:
-            main_audio_path: Path to main audio (title narration)
-            pop_sfx_path: Path to pop sound effect
-            pop_start_time: When to start pop SFX in seconds (relative to main audio)
-            pop_volume_delta: Volume adjustment for pop SFX in dB (negative = quieter)
-            output_path: Optional output path for mixed audio
-            
-        Returns:
-            Path to mixed audio file, or None if failed
         """
         if not PYDUB_AVAILABLE:
             logger.error("pydub not available, cannot mix audio")
@@ -148,7 +138,65 @@ class AudioMixer:
         except Exception as e:
             logger.error(f"Error mixing audio: {e}")
             return None
-    
+
+    def add_background_music(
+        self,
+        main_audio_path: Path,
+        bg_music_path: Path,
+        output_path: Optional[Path] = None,
+        bg_volume_delta: float = -24.0,
+        start_offset_seconds: float = 0.0,  # <--- פרמטר חדש לחיתוך ההתחלה
+    ) -> Optional[Path]:
+        """
+        Mix main audio (narration) with looping background music.
+        """
+        if not PYDUB_AVAILABLE:
+            logger.error("pydub not available, cannot mix background music")
+            return None
+            
+        logger.info(f"Adding background music: {bg_music_path.name} starting from {start_offset_seconds}s")
+        
+        main_audio = self._load_audio(main_audio_path)
+        bg_music = self._load_audio(bg_music_path)
+        
+        if main_audio is None or bg_music is None:
+            logger.error("Failed to load audio files for background music")
+            return None
+            
+        try:
+            # חיתוך השקט או הפתיח מההתחלה של שיר הרקע
+            if start_offset_seconds > 0:
+                start_ms = int(start_offset_seconds * 1000)
+                if start_ms < len(bg_music):
+                    bg_music = bg_music[start_ms:]
+                else:
+                    logger.warning("Start offset is longer than the music itself!")
+
+            # מנמיכים את הווליום
+            bg_music = bg_music.apply_gain(bg_volume_delta)
+            
+            # משכפלים את המוזיקה (Loop) כדי שתספיק לכל אורך הקריינות
+            loops_needed = (len(main_audio) // len(bg_music)) + 1
+            bg_music_looped = bg_music * loops_needed
+            
+            # חותכים בדיוק לאורך של הקריינות
+            bg_music_trimmed = bg_music_looped[:len(main_audio)]
+            
+            # מערבבים את הערוצים
+            mixed_audio = main_audio.overlay(bg_music_trimmed)
+            
+            if output_path is None:
+                import time, hashlib
+                content_hash = hashlib.md5(f"{main_audio_path}{bg_music_path}".encode()).hexdigest()[:8]
+                output_path = self.output_dir / f"with_bgm_{content_hash}_{int(time.time())}.mp3"
+                
+            mixed_audio.export(str(output_path), format="mp3", bitrate="128k")
+            return output_path
+            
+        except Exception as e:
+            logger.error(f"Error mixing background music: {e}")
+            return None
+        
     def fade_audio(
         self,
         audio_path: Path,
@@ -156,18 +204,7 @@ class AudioMixer:
         fade_out_duration: float = 0.1,  # seconds
         output_path: Optional[Path] = None,
     ) -> Optional[Path]:
-        """
-        Apply fade-in and fade-out to audio.
-        
-        Args:
-            audio_path: Path to audio file
-            fade_in_duration: Fade-in duration in seconds
-            fade_out_duration: Fade-out duration in seconds
-            output_path: Optional output path
-            
-        Returns:
-            Path to faded audio file, or None if failed
-        """
+        """Apply fade-in and fade-out to audio."""
         if not PYDUB_AVAILABLE:
             logger.error("pydub not available")
             return None
@@ -177,14 +214,11 @@ class AudioMixer:
             return None
         
         try:
-            # Convert durations to milliseconds
             fade_in_ms = int(fade_in_duration * 1000)
             fade_out_ms = int(fade_out_duration * 1000)
             
-            # Apply fades
             faded = audio.fade_in(fade_in_ms).fade_out(fade_out_ms)
             
-            # Generate output path if not provided
             if output_path is None:
                 import hashlib
                 import time
@@ -195,7 +229,6 @@ class AudioMixer:
                 filename = f"faded_audio_{content_hash}_{timestamp}.mp3"
                 output_path = self.output_dir / filename
             
-            # Export
             faded.export(str(output_path), format="mp3", bitrate="128k")
             
             if output_path.exists() and output_path.stat().st_size > 0:
@@ -212,20 +245,10 @@ class AudioMixer:
     def normalize_audio(
         self,
         audio_path: Path,
-        target_db: float = -20.0,  # Target loudness in dBFS
+        target_db: float = -20.0,
         output_path: Optional[Path] = None,
     ) -> Optional[Path]:
-        """
-        Normalize audio loudness to target dB level.
-        
-        Args:
-            audio_path: Path to audio file
-            target_db: Target loudness in dBFS
-            output_path: Optional output path
-            
-        Returns:
-            Path to normalized audio file, or None if failed
-        """
+        """Normalize audio loudness to target dB level."""
         if not PYDUB_AVAILABLE:
             logger.error("pydub not available")
             return None
@@ -235,14 +258,11 @@ class AudioMixer:
             return None
         
         try:
-            # Calculate current loudness
             current_db = audio.dBFS
             gain_db = target_db - current_db
             
-            # Apply gain
             normalized = audio.apply_gain(gain_db)
             
-            # Generate output path if not provided
             if output_path is None:
                 import hashlib
                 import time
@@ -251,7 +271,6 @@ class AudioMixer:
                 filename = f"normalized_audio_{content_hash}_{timestamp}.mp3"
                 output_path = self.output_dir / filename
             
-            # Export
             normalized.export(str(output_path), format="mp3", bitrate="128k")
             
             if output_path.exists() and output_path.stat().st_size > 0:
@@ -268,20 +287,10 @@ class AudioMixer:
     def concat_audio_files(
         self,
         audio_paths: List[Path],
-        crossfade_duration: float = 0.0,  # seconds
+        crossfade_duration: float = 0.0,
         output_path: Optional[Path] = None,
     ) -> Optional[Path]:
-        """
-        Concatenate multiple audio files.
-        
-        Args:
-            audio_paths: List of audio file paths
-            crossfade_duration: Crossfade duration between segments in seconds
-            output_path: Optional output path
-            
-        Returns:
-            Path to concatenated audio file, or None if failed
-        """
+        """Concatenate multiple audio files."""
         if not PYDUB_AVAILABLE:
             logger.error("pydub not available")
             return None
@@ -291,7 +300,6 @@ class AudioMixer:
             return None
         
         try:
-            # Load all audio segments
             segments = []
             for path in audio_paths:
                 if not path.exists():
@@ -301,7 +309,6 @@ class AudioMixer:
                 segment = self._load_audio(path)
                 if segment is not None:
                     segments.append(segment)
-                    logger.debug(f"Loaded segment: {path} ({len(segment)}ms)")
                 else:
                     logger.warning(f"Failed to load segment: {path}")
             
@@ -309,29 +316,20 @@ class AudioMixer:
                 logger.error("No valid audio segments loaded")
                 return None
             
-            # Concatenate with optional crossfade
             crossfade_ms = int(crossfade_duration * 1000)
             
             if crossfade_ms > 0 and len(segments) > 1:
-                # Start with first segment
                 concatenated = segments[0]
-                
-                # Append remaining segments with crossfade
                 for i, segment in enumerate(segments[1:], 1):
-                    # Check if crossfade is possible (segments long enough)
                     if len(concatenated) >= crossfade_ms and len(segment) >= crossfade_ms:
                         concatenated = concatenated.append(segment, crossfade=crossfade_ms)
-                        logger.debug(f"Appended segment {i+1} with {crossfade_duration}s crossfade")
                     else:
                         concatenated = concatenated.append(segment)
-                        logger.debug(f"Appended segment {i+1} without crossfade")
             else:
-                # Simple concatenation
                 concatenated = segments[0]
                 for segment in segments[1:]:
                     concatenated = concatenated.append(segment)
             
-            # Generate output path if not provided
             if output_path is None:
                 import hashlib
                 import time
@@ -341,11 +339,10 @@ class AudioMixer:
                 filename = f"concatenated_audio_{content_hash}_{timestamp}.mp3"
                 output_path = self.output_dir / filename
             
-            # Export
             concatenated.export(str(output_path), format="mp3", bitrate="128k")
             
             if output_path.exists() and output_path.stat().st_size > 0:
-                logger.info(f"Concatenated audio saved: {output_path} ({len(segments)} segments, {len(concatenated)/1000:.1f}s)")
+                logger.info(f"Concatenated audio saved: {output_path}")
                 return output_path
             else:
                 logger.error(f"Failed to save concatenated audio: {output_path}")
@@ -373,76 +370,16 @@ class AudioMixer:
         )
 
 
-# Utility function for common use case
 def create_title_audio_with_pop(
     title_audio_path: Path,
     pop_sfx_path: Path,
     output_dir: Optional[Path] = None,
     pop_volume: float = -6.0,
 ) -> Optional[Path]:
-    """
-    Convenience function to create title audio with pop sound effect.
-    
-    Args:
-        title_audio_path: Path to title narration audio
-        pop_sfx_path: Path to pop sound effect
-        output_dir: Optional output directory
-        pop_volume: Pop SFX volume adjustment in dB
-        
-    Returns:
-        Path to mixed audio file
-    """
     mixer = AudioMixer(output_dir=output_dir)
     return mixer.mix_title_with_pop_sfx(
         main_audio_path=title_audio_path,
         pop_sfx_path=pop_sfx_path,
-        pop_start_time=0.0,  # Pop at the very beginning
+        pop_start_time=0.0,
         pop_volume_delta=pop_volume,
     )
-
-
-# Test function
-def test_audio_mixer():
-    """Test the audio mixer functionality."""
-    import tempfile
-    from pathlib import Path
-    import sys
-    
-    print("Testing AudioMixer...")
-    
-    # Create mixer
-    mixer = AudioMixer()
-    
-    # Create dummy audio files for testing
-    temp_dir = Path(tempfile.gettempdir())
-    
-    # Test 1: Fade audio
-    print("\n1. Testing fade functionality...")
-    # We'll skip actual file creation since we don't have real audio files
-    print("   (Requires actual audio files for full test)")
-    
-    # Test 2: Normalize audio  
-    print("\n2. Testing normalize functionality...")
-    print("   (Requires actual audio files for full test)")
-    
-    # Test 3: Concatenate audio
-    print("\n3. Testing concatenate functionality...")
-    print("   (Requires actual audio files for full test)")
-    
-    # Test 4: Mix with pop SFX
-    print("\n4. Testing mix with pop SFX...")
-    print("   (Requires actual audio files for full test)")
-    
-    # Show available methods
-    print("\nAvailable AudioMixer methods:")
-    print("  - mix_title_with_pop_sfx()")
-    print("  - fade_audio()")
-    print("  - normalize_audio()")
-    print("  - concat_audio_files()")
-    print("  - mix_title_with_pop_sfx_async() (async wrapper)")
-    
-    print("\nAudioMixer test completed (requires actual audio files for full test)")
-
-
-if __name__ == "__main__":
-    test_audio_mixer()
