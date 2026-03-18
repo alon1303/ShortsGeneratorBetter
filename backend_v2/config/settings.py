@@ -118,11 +118,33 @@ class Settings(BaseSettings):
         case_sensitive = False
         extra = "ignore"  # Allow extra environment variables (e.g., Google OAuth)
     
+    @validator("ASSETS_DIR", "BACKGROUNDS_DIR", pre=True)
+    def resolve_relative_to_base_dir(cls, v: Any, values: Dict[str, Any]) -> Any:
+        """Resolve ASSETS_DIR and BACKGROUNDS_DIR relative to BASE_DIR if they are relative paths."""
+        if isinstance(v, str):
+            v = Path(v)
+        
+        # If path is not absolute, resolve it relative to BASE_DIR
+        if isinstance(v, Path) and not v.is_absolute():
+            # Get BASE_DIR from values (already validated)
+            if "BASE_DIR" in values and values["BASE_DIR"]:
+                base_dir = values["BASE_DIR"]
+                # Resolve relative to BASE_DIR
+                v = base_dir / v
+            else:
+                # Fallback: make absolute relative to current directory
+                v = v.absolute()
+        
+        return v
+    
     @validator("UPLOAD_DIR", "OUTPUT_DIR", "DATA_DIR", "CACHE_DIR", "ASSETS_DIR", "BACKGROUNDS_DIR", pre=True)
     def validate_and_create_dirs(cls, v: Path) -> Path:
         """Validate and create directories if they don't exist."""
         if isinstance(v, str):
             v = Path(v)
+        # Ensure absolute path (should already be absolute from resolve_relative_to_base_dir)
+        if not v.is_absolute():
+            v = v.absolute()
         v.mkdir(parents=True, exist_ok=True)
         return v
     

@@ -31,6 +31,45 @@ class VideoComposer:
         self.audio_mixer = AudioMixer()
         logger.info("VideoComposer initialized")
     
+    def _validate_background_fps(self, background_path: Path) -> bool:
+        """
+        Validate that background video FPS matches target FPS from settings.
+        Returns True if FPS matches within tolerance, False otherwise.
+        """
+        try:
+            metadata = self.background_manager.get_video_metadata(background_path)
+            background_fps = metadata.get('fps', 0)
+            target_fps = settings.TARGET_FPS
+            
+            if background_fps <= 0:
+                logger.warning(f"Could not determine FPS for background: {background_path}")
+                return False
+            
+            tolerance = 0.5
+            fps_match = abs(background_fps - target_fps) <= tolerance
+            
+            if not fps_match:
+                logger.warning(
+                    f"Background FPS mismatch: {background_fps:.2f} vs target {target_fps} "
+                    f"for {background_path.name}. Subtitles may drift."
+                )
+            
+            return fps_match
+            
+        except Exception as e:
+            logger.error(f"Failed to validate background FPS: {e}")
+            return False
+    
+    def _ensure_subtitle_fps_alignment(self, subtitle_path: Path, target_fps: int) -> bool:
+        """
+        Ensure subtitle file uses correct FPS for timing calculations.
+        This is a placeholder for future implementation if ASS subtitles
+        need FPS-specific adjustments.
+        """
+        # ASS subtitles typically use seconds internally, not frame-based timing
+        # But we should validate that our timing calculations use correct FPS
+        return True
+    
     def create_subtitles_for_text(
         self,
         text: str,
@@ -99,6 +138,9 @@ class VideoComposer:
         hook_duration: Optional[float] = None
     ) -> bool:
         try:
+            # Validate background FPS before composition
+            self._validate_background_fps(background_path)
+            
             audio_cmd = [
                 'ffprobe', '-v', 'quiet', '-show_entries', 'format=duration',
                 '-of', 'default=noprint_wrappers=1:nokey=1', str(audio_path)
@@ -320,6 +362,9 @@ class VideoComposer:
             
             if not background_path:
                 raise RuntimeError("Failed to create background clip")
+            
+            # Validate background FPS for subtitle alignment
+            self._validate_background_fps(background_path)
             
             subtitle_path = temp_path / "subtitles.ass"
             
