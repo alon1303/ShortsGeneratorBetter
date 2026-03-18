@@ -170,6 +170,7 @@ class AutoPipeline:
         max_retries_per_story: int = 2,
         skip_processed_posts: bool = True,
         data_dir: Optional[Path] = None,
+        bg_music_path: Optional[Path] = None,
     ):
         """
         Initialize the automation pipeline.
@@ -186,6 +187,7 @@ class AutoPipeline:
             max_retries_per_story: Maximum retries for failed story processing
             skip_processed_posts: Skip posts already in duplicate prevention system
             data_dir: Directory for storing pipeline data
+            bg_music_path: Path to background music file
         """
         # Configuration
         self.subreddits = subreddits or ["AmItheAsshole", "tifu", "TrueOffMyChest", "pettyrevenge", "EntitledParents"]
@@ -193,6 +195,7 @@ class AutoPipeline:
         self.max_video_duration = max_video_duration_minutes * 60
         self.theme = theme or settings.DEFAULT_BACKGROUND_THEME
         self.voice_id = voice_id or settings.DEFAULT_VOICE_ID
+        self.bg_music_path = bg_music_path or settings.DEFAULT_BGM_PATH
         self.upload_to_youtube = upload_to_youtube
         self.youtube_privacy_status = youtube_privacy_status
         self.delay_between_uploads = delay_between_uploads_seconds
@@ -420,7 +423,8 @@ class AutoPipeline:
                             output_path=part_path,
                             overlay_image_path=title_card_path,
                             pop_sfx_path=None,  # Optional: add pop SFX if available
-                            timing_data=timing_data
+                            timing_data=timing_data,
+                            bg_music_path=self.bg_music_path
                         )
                     else:
                         video_part = composer.create_video_part(
@@ -429,7 +433,8 @@ class AutoPipeline:
                             output_path=part_path,
                             overlay_image_path=None,
                             pop_sfx_path=None,
-                            timing_data=None
+                            timing_data=None,
+                            bg_music_path=self.bg_music_path
                         )
                     
                     video_parts.append(video_part)

@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     CACHE_DIR: Path = BASE_DIR / "cache"
     ASSETS_DIR: Path = BASE_DIR / "assets"
     BACKGROUNDS_DIR: Path = ASSETS_DIR / "backgrounds"
+    DEFAULT_BGM_PATH: Path = ASSETS_DIR / "audio" / "lofi_bg.mp3"
     
     # File upload settings
     MAX_FILE_SIZE_MB: int = 100
@@ -53,7 +54,7 @@ class Settings(BaseSettings):
     MIN_STORY_LENGTH: int = 200  # characters
     MAX_STORY_LENGTH: int = 5000  # characters
     EXCLUDE_NSFW: bool = True
-    WORDS_PER_MINUTE: int = 188  # Narration speed - increased by 25% for squeaky style
+    WORDS_PER_MINUTE: int = 180  # Narration speed
     
     # ElevenLabs API Settings (for Phase 2)
     ELEVENLABS_API_KEY: Optional[str] = None
@@ -63,10 +64,10 @@ class Settings(BaseSettings):
     ELEVENLABS_VOICE_JOSH: str = "TxGEqnHWrfWFTfGW9XjX"    # Casual male
     
     # Edge TTS Voices (for TTS_ENGINE = "edge")
-    EDGE_TTS_VOICE_FEMALE: str = "en-US-JennyNeural"        # Female voice - better for high-pitch
+    EDGE_TTS_VOICE_FEMALE: str = "en-US-JennyNeural"        # Female voice
     EDGE_TTS_VOICE_MALE: str = "en-US-ChristopherNeural"   # Male voice
     
-    DEFAULT_VOICE_ID: str = EDGE_TTS_VOICE_FEMALE  # Default to female Edge TTS voice
+    DEFAULT_VOICE_ID: str = EDGE_TTS_VOICE_MALE  # Default to male Edge TTS voice
     
     # Edge TTS alias mapping for get_voice_id method
     EDGE_TTS_ALIASES: Dict[str, str] = Field(
@@ -93,6 +94,7 @@ class Settings(BaseSettings):
     BACKGROUND_CLIP_DURATION_MIN: float = 5.0  # Minimum clip duration in seconds
     BACKGROUND_CLIP_DURATION_MAX: float = 10.0  # Maximum clip duration in seconds
     BACKGROUND_DYNAMIC_SWITCHING: bool = True  # Enable random theme switching per clip
+    BGM_VOLUME_DELTA: float = -10.0  # dB adjustment for background music
     
     # Video processing
     TARGET_WIDTH: int = 1080
@@ -101,7 +103,7 @@ class Settings(BaseSettings):
     VIDEO_CRF: int = 23  # Quality (0-51, lower is better)
     VIDEO_PRESET: str = "veryfast"
     AUDIO_BITRATE: str = "128k"
-    FINAL_VIDEO_SPEED: float = 1.0  # Dynamic video speed multiplier
+    FINAL_VIDEO_SPEED: float = 1.1  # Dynamic video speed multiplier
     
     # Story segmentation
     MIN_PART_DURATION: int = 30  # seconds

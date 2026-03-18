@@ -43,9 +43,9 @@ class EdgeTTSClient:
         self,
         voice: Optional[str] = None,
         cache_dir: Optional[Path] = None,
-        rate: str = "+25%",
+        rate: str = "+15%",
         volume: str = "+0%",
-        pitch: str = "+100Hz",
+        pitch: str = "+0Hz",
     ):
         """
         Initialize EdgeTTS client.

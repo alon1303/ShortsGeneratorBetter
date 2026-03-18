@@ -199,7 +199,7 @@ class VideoComposer:
                     main_audio_path=current_audio_path,
                     bg_music_path=bgm_temp,
                     output_path=temp_path / "audio_fully_mixed.mp3",
-                    bg_volume_delta=0.0,  # You can adjust this if needed
+                    bg_volume_delta=settings.BGM_VOLUME_DELTA,
                 )
                 
                 if mixed_with_bgm_path and mixed_with_bgm_path.exists():
