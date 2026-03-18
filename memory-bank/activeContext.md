@@ -10,22 +10,28 @@ The ShortsGenerator video generation pipeline is operational with core functiona
 4. **API Integration**: FastAPI endpoints for Reddit story processing with background job tracking
 5. **Title Card Generation**: Playwright-based HTML-to-image title card generation with Reddit post styling
 6. **Post-Specific Organization**: Each story creates organized output folders with title cards and separate video parts
+7. **Squeaky Voice Transformation**: Updated TTS settings for chipmunk-style narration with +100Hz pitch, +25% speed, and `en-US-JennyNeural` voice for better high-pitch handling
 
 ## Active Development Focus
 ### Core Video Generation Pipeline
 - **VideoComposer**: Main class handling video composition
-  - Sequential background clips for visual variety
+  - **Dynamic background sequencing** with random theme switching (5-10 second clips)
   - Word-level subtitle synchronization
   - Title card overlay with timing data
   - 1.4x speed post-processing option
+  - Background music integration
 - **BackgroundManager**: Dynamic background video management
-  - Theme-based background selection
+  - **Random theme switching** per clip for enhanced visual variety
+  - Configurable clip durations (5-10 seconds by default)
+  - Theme-based background selection with equal probability distribution
   - Sequential clip generation from multiple videos
   - GTA-specific timing support (00:04, 00:43, 07:43)
+  - Prevents consecutive use of same video clip
 - **SubtitleGenerator**: Advanced subtitle generation
-  - Word-by-word highlighting
+  - Word-by-word highlighting (Hormozi style)
   - Title filtering for separate title/subtitle timing
   - ASS format with styling and animations
+  - Audio offset detection and adjustment
 
 ## Current Work Items
 ### Immediate Tasks (In Progress)

@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     MIN_STORY_LENGTH: int = 200  # characters
     MAX_STORY_LENGTH: int = 5000  # characters
     EXCLUDE_NSFW: bool = True
-    WORDS_PER_MINUTE: int = 150  # Narration speed
+    WORDS_PER_MINUTE: int = 188  # Narration speed - increased by 25% for squeaky style
     
     # ElevenLabs API Settings (for Phase 2)
     ELEVENLABS_API_KEY: Optional[str] = None
@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     ELEVENLABS_VOICE_JOSH: str = "TxGEqnHWrfWFTfGW9XjX"    # Casual male
     
     # Edge TTS Voices (for TTS_ENGINE = "edge")
-    EDGE_TTS_VOICE_FEMALE: str = "en-US-AriaNeural"        # Female voice
+    EDGE_TTS_VOICE_FEMALE: str = "en-US-JennyNeural"        # Female voice - better for high-pitch
     EDGE_TTS_VOICE_MALE: str = "en-US-ChristopherNeural"   # Male voice
     
     DEFAULT_VOICE_ID: str = EDGE_TTS_VOICE_FEMALE  # Default to female Edge TTS voice
@@ -71,11 +71,11 @@ class Settings(BaseSettings):
     # Edge TTS alias mapping for get_voice_id method
     EDGE_TTS_ALIASES: Dict[str, str] = Field(
         default_factory=lambda: {
-            "female": "en-US-AriaNeural",
+            "female": "en-US-JennyNeural",
             "male": "en-US-ChristopherNeural", 
             "aria": "en-US-AriaNeural",
             "christopher": "en-US-ChristopherNeural",
-            "default": "en-US-AriaNeural",
+            "default": "en-US-JennyNeural",
         },
         description="Mapping of voice aliases to Edge TTS voice IDs"
     )
@@ -85,9 +85,14 @@ class Settings(BaseSettings):
     
     # Background video settings
     DEFAULT_BACKGROUND_THEME: str = "minecraft"
-    BACKGROUND_THEMES: List[str] = ["minecraft", "abstract", "nature", "lofi"]
+    BACKGROUND_THEMES: List[str] = ["abstract", "food", "gta", "lofi", "minecraft", "nature", "oddly satisfying", "subway surfer"]
     MIN_BACKGROUND_DURATION: int = 60  # seconds
     MAX_BACKGROUND_DURATION: int = 300  # seconds
+    
+    # Dynamic background clip settings
+    BACKGROUND_CLIP_DURATION_MIN: float = 5.0  # Minimum clip duration in seconds
+    BACKGROUND_CLIP_DURATION_MAX: float = 10.0  # Maximum clip duration in seconds
+    BACKGROUND_DYNAMIC_SWITCHING: bool = True  # Enable random theme switching per clip
     
     # Video processing
     TARGET_WIDTH: int = 1080

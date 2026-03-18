@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 class EdgeTTSClient:
     """Async client for Microsoft Edge Text-to-Speech (edge-tts)."""
     
-    # Default voice for English (US) - professional male voice
-    DEFAULT_VOICE = "en-US-GuyNeural"
+    # Default voice for English (US) - female voice better for high-pitch
+    DEFAULT_VOICE = "en-US-JennyNeural"
     
     # Available voices for different languages/accents
     AVAILABLE_VOICES = {
@@ -43,9 +43,9 @@ class EdgeTTSClient:
         self,
         voice: Optional[str] = None,
         cache_dir: Optional[Path] = None,
-        rate: str = "+0%",
+        rate: str = "+25%",
         volume: str = "+0%",
-        pitch: str = "+0Hz",
+        pitch: str = "+100Hz",
     ):
         """
         Initialize EdgeTTS client.

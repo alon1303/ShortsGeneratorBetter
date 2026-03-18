@@ -291,7 +291,8 @@ class VideoComposer:
         pop_sfx_path: Optional[Path] = None,
         timing_data: Optional[Dict[str, Any]] = None,
         hook_duration: Optional[float] = None,
-        bg_music_path: Optional[Path] = None  # Added bg_music_path
+        bg_music_path: Optional[Path] = None,  # Added bg_music_path
+        dynamic_switching: Optional[bool] = None
     ) -> Optional[Path]:
         if not audio_chunk.audio_path.exists():
             raise FileNotFoundError(f"Audio file does not exist: {audio_chunk.audio_path}")
@@ -305,11 +306,16 @@ class VideoComposer:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             
-            logger.info(f"Creating sequential background clip for {audio_chunk.duration_seconds:.1f}s audio")
+            # Use dynamic switching if explicitly specified, otherwise use default from settings
+            use_dynamic = dynamic_switching if dynamic_switching is not None else settings.BACKGROUND_DYNAMIC_SWITCHING
+            mode_desc = "dynamic" if use_dynamic else "sequential"
+            logger.info(f"Creating {mode_desc} background clip for {audio_chunk.duration_seconds:.1f}s audio")
+            
             background_path = self.background_manager.create_sequential_background_clip(
                 duration=audio_chunk.duration_seconds,
                 theme=theme,
-                output_path=temp_path / "background.mp4"
+                output_path=temp_path / "background.mp4",
+                dynamic_switching=use_dynamic
             )
             
             if not background_path:
@@ -424,7 +430,8 @@ class VideoComposer:
                     output_path=part_path,
                     overlay_image_path=overlay_image_path if i == 1 else None,
                     pop_sfx_path=pop_sfx_path if i == 1 else None,
-                    bg_music_path=bg_music_path  # Pass bg_music_path
+                    bg_music_path=bg_music_path,  # Pass bg_music_path
+                    dynamic_switching=None  # Use default from settings
                 )
                 video_parts.append(video_part)
             
@@ -471,7 +478,8 @@ class VideoComposer:
                 output_path=part_path,
                 overlay_image_path=overlay_image_path if i == 1 else None,
                 pop_sfx_path=pop_sfx_path if i == 1 else None,
-                bg_music_path=bg_music_path
+                bg_music_path=bg_music_path,
+                dynamic_switching=None  # Use default from settings
             )
             video_parts.append(video_part)
         

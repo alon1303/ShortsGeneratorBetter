@@ -285,11 +285,18 @@ class BackgroundManager:
         self,
         duration: float,
         theme: Optional[str] = None,
-        output_path: Optional[Path] = None
+        output_path: Optional[Path] = None,
+        dynamic_switching: bool = False
     ) -> Optional[Path]:
         """
-        Create a sequential background video clip by concatenating full short clips
+        Create a sequential background video clip by concatenating short clips
         to cover the target duration. Ensures clips play from the beginning.
+        
+        Args:
+            duration: Total duration needed for the background video
+            theme: Optional specific theme to use (if None, uses random themes when dynamic_switching=True)
+            output_path: Optional output path for the final concatenated video
+            dynamic_switching: If True, enables random theme switching per clip with configurable clip durations
         """
         # Validate duration
         if duration <= 0:
@@ -300,8 +307,23 @@ class BackgroundManager:
             logger.warning(f"Duration {duration}s exceeds maximum {settings.MAX_BACKGROUND_DURATION}s, clipping")
             duration = min(duration, settings.MAX_BACKGROUND_DURATION)
         
-        logger.info(f"Creating sequential background clip: {duration:.1f}s total using full short clips")
+        # Use dynamic switching if enabled in settings or explicitly requested
+        use_dynamic = dynamic_switching or settings.BACKGROUND_DYNAMIC_SWITCHING
         
+        if use_dynamic:
+            logger.info(f"Creating dynamic background sequence: {duration:.1f}s with random theme switching")
+            return self._create_dynamic_background_sequence(duration, output_path)
+        else:
+            logger.info(f"Creating sequential background clip: {duration:.1f}s using theme '{theme or 'random'}'")
+            return self._create_sequential_clip_fixed_theme(duration, theme, output_path)
+    
+    def _create_sequential_clip_fixed_theme(
+        self,
+        duration: float,
+        theme: Optional[str] = None,
+        output_path: Optional[Path] = None
+    ) -> Optional[Path]:
+        """Internal method: Create sequential clip with fixed theme (original behavior)."""
         temp_dir = Path(tempfile.mkdtemp())
         try:
             clip_paths = []
@@ -350,7 +372,7 @@ class BackgroundManager:
                 accumulated_duration += clip_duration
                 clip_index += 1
                 
-                logger.debug(f"Added satisfying clip {clip_index}: {clip_duration:.1f}s from {bg_path.name}")
+                logger.debug(f"Added clip {clip_index}: {clip_duration:.1f}s from {bg_path.name}")
             
             if not clip_paths:
                 logger.error("No clips were successfully extracted")
@@ -359,37 +381,156 @@ class BackgroundManager:
             if output_path is None:
                 output_path = Path(tempfile.gettempdir()) / f"sequential_background_{uuid.uuid4()}.mp4"
             
-            concat_file = temp_dir / "concat_list.txt"
-            with open(concat_file, 'w', encoding='utf-8') as f:
-                for clip_path in clip_paths:
-                    path_str = str(clip_path).replace('\\', '\\\\').replace("'", "'\\''")
-                    f.write(f"file '{path_str}'\n")
-            
-            cmd = [
-                'ffmpeg', '-y',
-                '-f', 'concat',
-                '-safe', '0',
-                '-i', str(concat_file),
-                '-c', 'copy',
-                '-movflags', '+faststart',
-                str(output_path)
-            ]
-            
-            logger.info(f"Concatenating {len(clip_paths)} clips into sequential background")
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            
-            if result.returncode != 0:
-                logger.error(f"FFmpeg concatenation failed: {result.stderr}")
-                return None
-            
-            if not output_path.exists() or output_path.stat().st_size == 0:
-                logger.error(f"Output file not created or empty: {output_path}")
-                return None
-            
-            return output_path
+            return self._concatenate_clips(clip_paths, output_path, temp_dir)
             
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
+    
+    def _create_dynamic_background_sequence(
+        self,
+        duration: float,
+        output_path: Optional[Path] = None
+    ) -> Optional[Path]:
+        """
+        Internal method: Create dynamic background sequence with random theme switching.
+        Each clip has random duration between BACKGROUND_CLIP_DURATION_MIN and BACKGROUND_CLIP_DURATION_MAX.
+        Themes are selected randomly with equal probability, and the same clip is not used consecutively.
+        """
+        temp_dir = Path(tempfile.mkdtemp())
+        try:
+            clip_paths = []
+            accumulated_duration = 0.0
+            clip_index = 0
+            last_video_path = None
+            available_themes = self.get_available_themes()
+            
+            # Filter out empty themes
+            themes_with_videos = []
+            for theme in available_themes:
+                if self.get_backgrounds_by_theme(theme):
+                    themes_with_videos.append(theme)
+            
+            if not themes_with_videos:
+                logger.error("No themes with videos available")
+                return None
+            
+            logger.info(f"Using {len(themes_with_videos)} themes for dynamic switching: {', '.join(themes_with_videos)}")
+            
+            # Loop until we have enough background video to cover the audio
+            while accumulated_duration < duration:
+                # 1. Randomly select a theme (equal probability)
+                selected_theme = random.choice(themes_with_videos)
+                
+                # 2. Get all videos in this theme
+                theme_videos = self.get_backgrounds_by_theme(selected_theme)
+                if not theme_videos:
+                    logger.warning(f"Theme '{selected_theme}' has no videos, skipping")
+                    continue
+                
+                # 3. Filter out last used video to avoid repetition
+                available_videos = [v for v in theme_videos if v != last_video_path]
+                if not available_videos:
+                    available_videos = theme_videos  # Reset if only one video
+                
+                # 4. Randomly select a video from this theme
+                bg_path = random.choice(available_videos)
+                last_video_path = bg_path
+                
+                # 5. Get video metadata
+                metadata = self.get_video_metadata(bg_path)
+                source_duration = metadata.get('duration_seconds', 0)
+                
+                if source_duration <= 0:
+                    continue
+                
+                # 6. Determine clip duration (random within configured range)
+                clip_duration_min = settings.BACKGROUND_CLIP_DURATION_MIN
+                clip_duration_max = settings.BACKGROUND_CLIP_DURATION_MAX
+                
+                # Ensure min <= max
+                if clip_duration_min > clip_duration_max:
+                    clip_duration_min, clip_duration_max = clip_duration_max, clip_duration_min
+                
+                # Random duration within range
+                target_clip_duration = random.uniform(clip_duration_min, clip_duration_max)
+                
+                # Adjust for remaining duration needed
+                remaining = duration - accumulated_duration
+                if remaining < target_clip_duration:
+                    target_clip_duration = remaining
+                
+                # Ensure we don't exceed source duration
+                actual_clip_duration = min(target_clip_duration, source_duration)
+                if actual_clip_duration <= 0:
+                    continue
+                
+                # 7. ALWAYS START FROM 0.0
+                start_time = 0.0
+                
+                clip_path = temp_dir / f"clip_{clip_index}_{uuid.uuid4().hex[:8]}.mp4"
+                
+                success = self.extract_video_clip(
+                    video_path=bg_path,
+                    start_time=start_time,
+                    duration=actual_clip_duration,
+                    output_path=clip_path,
+                    target_width=settings.TARGET_WIDTH,
+                    target_height=settings.TARGET_HEIGHT
+                )
+                
+                if not success or not clip_path.exists() or clip_path.stat().st_size == 0:
+                    logger.error(f"Failed to extract clip {clip_index} from {bg_path.name}")
+                    continue
+                
+                clip_paths.append(clip_path)
+                accumulated_duration += actual_clip_duration
+                clip_index += 1
+                
+                logger.debug(f"Added dynamic clip {clip_index}: {actual_clip_duration:.1f}s from theme '{selected_theme}' ({bg_path.name})")
+            
+            if not clip_paths:
+                logger.error("No clips were successfully extracted")
+                return None
+            
+            if output_path is None:
+                output_path = Path(tempfile.gettempdir()) / f"dynamic_background_{uuid.uuid4()}.mp4"
+            
+            return self._concatenate_clips(clip_paths, output_path, temp_dir)
+            
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+    
+    def _concatenate_clips(self, clip_paths: List[Path], output_path: Path, temp_dir: Path) -> Optional[Path]:
+        """Internal method: Concatenate clips using stream copy for performance."""
+        concat_file = temp_dir / "concat_list.txt"
+        with open(concat_file, 'w', encoding='utf-8') as f:
+            for clip_path in clip_paths:
+                path_str = str(clip_path).replace('\\', '\\\\').replace("'", "'\\''")
+                f.write(f"file '{path_str}'\n")
+        
+        cmd = [
+            'ffmpeg', '-y',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', str(concat_file),
+            '-c', 'copy',
+            '-movflags', '+faststart',
+            str(output_path)
+        ]
+        
+        logger.info(f"Concatenating {len(clip_paths)} clips into final background video")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            logger.error(f"FFmpeg concatenation failed: {result.stderr}")
+            return None
+        
+        if not output_path.exists() or output_path.stat().st_size == 0:
+            logger.error(f"Output file not created or empty: {output_path}")
+            return None
+        
+        logger.info(f"Successfully created background video: {output_path}")
+        return output_path
 
     def validate_backgrounds(self) -> Dict[str, Any]:
         results = {

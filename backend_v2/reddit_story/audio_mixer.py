@@ -145,7 +145,8 @@ class AudioMixer:
         bg_music_path: Path,
         output_path: Optional[Path] = None,
         bg_volume_delta: float = -24.0,
-        start_offset_seconds: float = 0.0,  # <--- פרמטר חדש לחיתוך ההתחלה
+        start_offset_seconds: float = 17.0,
+            
     ) -> Optional[Path]:
         """
         Mix main audio (narration) with looping background music.
