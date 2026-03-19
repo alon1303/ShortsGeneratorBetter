@@ -28,6 +28,15 @@ The ShortsGenerator video generation pipeline is **operational** with core funct
    - GTA-specific timing support (00:04, 00:43, 07:43)
    - Video metadata caching for performance
    - 9:16 aspect ratio cropping and scaling
+   - **FFmpeg SAR Fix**: Forced 1:1 Sample Aspect Ratio in extraction to prevent concatenation errors.
+>>>>>>>------- SEARCH
+### Phase 1: Core Pipeline (Current - ✅)
+- [x] Reddit story to video conversion works end-to-end
+- [x] Basic testing completed
+### Phase 1: Core Pipeline (Current - ✅)
+- [x] Reddit story to video conversion works end-to-end
+- [x] FFmpeg concatenation fixed (SAR 1:1 forced)
+- [x] Basic testing completed
 
 5. **Subtitle Generation** (`subtitle_generator.py`)
    - Word-level subtitle synchronization (Hormozi style)

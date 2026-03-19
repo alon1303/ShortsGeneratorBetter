@@ -4,7 +4,14 @@
 The ShortsGenerator video generation pipeline is operational with core functionality working. The system can successfully convert Reddit stories into short-form videos with narration, dynamic backgrounds, and professional subtitles.
 
 ## Recent Changes & Accomplishments
-1. **Video Composition Pipeline**: Successfully implemented `VideoComposer` class that combines audio narration, background videos, and subtitles
+1. **FFmpeg SAR Fix**: Forced 1:1 Sample Aspect Ratio in background extraction to prevent concatenation errors due to SAR mismatches between different source videos.
+2. **Video Composition Pipeline**: Successfully implemented `VideoComposer` class that combines audio narration, background videos, and subtitles
+>>>>>>>------- SEARCH
+### What Works Well
+1. **Sequential Backgrounds**: Significantly improves viewer engagement
+### What Works Well
+1. **FFmpeg Consistency**: Forcing `setsar=1` in `BackgroundManager` ensures all clips have the same metadata for reliable concatenation.
+2. **Sequential Backgrounds**: Significantly improves viewer engagement
 2. **Dynamic Background Management**: Created `BackgroundManager` with sequential background clipping and theme-based selection
 3. **Subtitle Generation**: Implemented word-level subtitle synchronization with Hormozi-style highlighting
 4. **API Integration**: FastAPI endpoints for Reddit story processing with background job tracking

@@ -301,9 +301,11 @@ class BackgroundManager:
             y_offset = max(0, (original_height - crop_height) // 2)
 
             # Build FFmpeg command with strict encoding parameters
+            # Force SAR 1:1 to ensure all clips are consistent for concatenation
             filter_complex = (
                 f'[0:v]crop={crop_width}:{crop_height}:{x_offset}:{y_offset},'
                 f'scale={target_width}:{target_height},'
+                f'setsar=1,'
                 f'fps=fps={force_fps}[v]'
             )
             
