@@ -10,7 +10,7 @@ import re
 import asyncio
 import math
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 import base64
 import hashlib
 import time
@@ -120,16 +120,22 @@ class RedditImageGenerator:
         
         logger.debug("Playwright browser closed")
     
-    def _format_score(self, score: int) -> str:
-        """Format score with K/M suffix if large."""
+    def _format_score(self, score: Union[int, str]) -> str:
+        """Format score with K/M suffix if large. Handles both int and str inputs."""
+        if isinstance(score, str):
+            return score
+            
         if score >= 1000000:
             return f"{score/1000000:.1f}M"
         elif score >= 1000:
             return f"{score/1000:.1f}K"
         return str(score)
     
-    def _format_comments(self, comments: int) -> str:
-        """Format comment count with K/M suffix if large."""
+    def _format_comments(self, comments: Union[int, str]) -> str:
+        """Format comment count with K/M suffix if large. Handles both int and str inputs."""
+        if isinstance(comments, str):
+            return comments
+            
         if comments >= 1000000:
             return f"{comments/1000000:.1f}M"
         elif comments >= 1000:

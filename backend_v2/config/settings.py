@@ -119,7 +119,14 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
         case_sensitive = False
         extra = "ignore"  # Allow extra environment variables (e.g., Google OAuth)
-    
+
+    @validator("TTS_ENGINE")
+    def validate_tts_engine(cls, v):
+        """Validate TTS engine selection."""
+        if v.lower() not in ["edge", "elevenlabs"]:
+            raise ValueError(f"Invalid TTS engine: {v}. Must be 'edge' or 'elevenlabs'")
+        return v.lower()
+
     @validator("ASSETS_DIR", "BACKGROUNDS_DIR", pre=True)
     def resolve_relative_to_base_dir(cls, v: Any, values: Dict[str, Any]) -> Any:
         """Resolve ASSETS_DIR and BACKGROUNDS_DIR relative to BASE_DIR if they are relative paths."""
@@ -222,13 +229,15 @@ class Settings(BaseSettings):
         """Check if ElevenLabs API is properly configured."""
         return bool(self.ELEVENLABS_API_KEY)
     
-    def get_voice_id(self, voice_name: Optional[str] = None) -> str:
+    def get_voice_id(self, voice_name: Optional[str] = None, engine: Optional[str] = None) -> str:
         """
         Get voice ID by name or return default.
-        Returns appropriate voice ID based on TTS_ENGINE setting.
+        Returns appropriate voice ID based on TTS_ENGINE setting or provided engine.
         """
+        engine = engine or self.TTS_ENGINE.lower()
+
         # Determine which voice map to use based on TTS engine
-        if self.TTS_ENGINE.lower() == "edge":
+        if engine == "edge":
             if voice_name:
                 voice_lower = voice_name.lower()
                 # Check if it's a known alias
@@ -240,7 +249,7 @@ class Settings(BaseSettings):
             # Return default Edge TTS voice
             return self.DEFAULT_VOICE_ID
             
-        elif self.TTS_ENGINE.lower() == "elevenlabs":
+        elif engine == "elevenlabs":
             # ElevenLabs voice mapping
             elevenlabs_voice_map = {
                 "rachel": self.ELEVENLABS_VOICE_RACHEL,
@@ -249,16 +258,21 @@ class Settings(BaseSettings):
                 "josh": self.ELEVENLABS_VOICE_JOSH,
             }
             
-            if voice_name and voice_name.lower() in elevenlabs_voice_map:
-                return elevenlabs_voice_map[voice_name.lower()]
+            if voice_name:
+                voice_lower = voice_name.lower()
+                if voice_lower in elevenlabs_voice_map:
+                    return elevenlabs_voice_map[voice_lower]
+                # If it's a 20-character alphanumeric string, it's likely a voice ID
+                if len(voice_name) == 20 and voice_name.isalnum():
+                    return voice_name
+
             # Return default ElevenLabs voice (if configured) or fallback
             if self.is_elevenlabs_configured():
-                return self.ELEVENLABS_VOICE_RACHEL
+                return self.ELEVENLABS_VOICE_ADAM
             else:
                 # Fall back to Edge TTS if ElevenLabs not configured
                 logger = logging.getLogger(__name__)
                 logger.warning("ElevenLabs not configured, falling back to Edge TTS")
-                self.TTS_ENGINE = "edge"
                 return self.EDGE_TTS_VOICE_FEMALE
         
         # Default case (shouldn't happen)

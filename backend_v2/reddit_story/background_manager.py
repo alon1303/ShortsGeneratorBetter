@@ -127,6 +127,7 @@ class BackgroundManager:
         return video_files
 
     def get_random_background(self, theme: Optional[str] = None) -> Optional[Path]:
+        logger.info(f"Searching for backgrounds in: {self.backgrounds_dir}")
         if theme:
             backgrounds = self.get_backgrounds_by_theme(theme)
         else:
