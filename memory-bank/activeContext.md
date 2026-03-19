@@ -24,7 +24,7 @@ The ShortsGenerator video generation pipeline is operational with core functiona
 - **VideoComposer**: Main class handling video composition
   - **Dynamic background sequencing** with random theme switching (5-10 second clips)
   - Word-level subtitle synchronization
-  - Title card overlay with timing data
+  - Title card overlay with slowed-down animations (0.6s in, 0.8s out) and 2s buffer
   - 1.4x speed post-processing option
   - Background music integration
 - **BackgroundManager**: Dynamic background video management

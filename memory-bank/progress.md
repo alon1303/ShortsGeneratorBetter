@@ -125,7 +125,7 @@ The ShortsGenerator video generation pipeline is **operational** with core funct
 
 ### Video Composition
 - 1.4x speed processing works but quality impact needs assessment
-- Title card animations implemented but timing may need adjustment
+- Title card animations improved: slower transitions (0.6s in, 0.8s out) and 2s screen buffer for better readability
 - Error recovery works but could be more robust
 
 ## Known Issues and Limitations 🐛

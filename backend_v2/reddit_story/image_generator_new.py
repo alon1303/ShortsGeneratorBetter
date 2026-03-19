@@ -471,24 +471,25 @@ class RedditImageGenerator:
 class TitlePopupTimingCalculator:
     """Calculates timing for title popup animation and display."""
     
-    def __init__(self, title_audio_duration: float, buffer_seconds: float = 0.0):
+    def __init__(self, title_audio_duration: float, buffer_seconds: float = 2.0):
         """
         Initialize timing calculator.
         
         Args:
             title_audio_duration: Duration of title audio in seconds
-            buffer_seconds: Additional buffer after audio ends (default: 0.0s)
+            buffer_seconds: Additional buffer after audio ends (default: 2.0s)
         """
         self.title_audio_duration = title_audio_duration
         self.buffer_seconds = buffer_seconds
         
         # Animation parameters
-        self.pop_in_duration = 0.8  # seconds for scale animation (Slow Pop In)
-        self.display_duration = title_audio_duration  # Card disappears exactly when title audio ends
+        self.pop_in_duration = 1.2  # Total animation budget for entrance (used in filter)
+        # Increase Display Time: Title audio + buffer
+        self.display_duration = title_audio_duration + buffer_seconds
         
         # Calculate key timing points
         self.card_start_time = 0.0
-        self.card_full_visible_time = self.pop_in_duration
+        self.card_full_visible_time = 0.6 # Point where it's fully slid up
         self.card_end_time = self.card_start_time + self.display_duration
         self.subtitle_start_time = self.card_end_time  # Subtitles start after card disappears (when story starts)
         
@@ -507,9 +508,10 @@ class TitlePopupTimingCalculator:
         preventing overlay clipping bugs and making rendering 100x faster.
         """
         TARGET_W = 950
-        # Make the animation slightly faster for a snappier feel
-        ANIM_DURATION = self.pop_in_duration / 2  
-        FADE_DURATION = 0.5
+        # Slow down Pop-In: Increase ANIM_DURATION to 0.6s
+        ANIM_DURATION = 0.6  
+        # Slow down Fade-Out: Increase FADE_DURATION to 0.8s
+        FADE_DURATION = 0.8
         
         # Calculate when to start the fade out
         fade_start = self.card_end_time - FADE_DURATION

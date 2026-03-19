@@ -223,19 +223,17 @@ class VideoComposer:
                     
                     if ('title_audio_duration' in timing_data and 'buffer_seconds' in timing_data and
                         'pop_in_duration' in timing_data):
-                        visual_gap = 0.15
-                        adjusted_duration = max(0.5, timing_data['title_audio_duration'] - visual_gap)
+                        # No longer subtracting visual_gap to allow the title to "breathe" more
                         calculator = TitlePopupTimingCalculator(
-                            title_audio_duration=adjusted_duration,
+                            title_audio_duration=timing_data['title_audio_duration'],
                             buffer_seconds=timing_data['buffer_seconds']
                         )
                         filter_complex = calculator.get_ffmpeg_filter_for_animation(overlay_temp)
                     else:
-                        visual_gap = 0.15
-                        adjusted_card_end = max(0.5, card_end - visual_gap)
+                        # For cases where timing_data is incomplete, still use full duration
                         filter_complex = (
                             f'[1:v]scale=900:-1[overlay_scaled];'
-                            f'[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:enable=\'between(t,{card_start},{adjusted_card_end})\''
+                            f'[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:enable=\'between(t,{card_start},{card_end})\''
                         )
                 else:
                     card_start = 0.0
