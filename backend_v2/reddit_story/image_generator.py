@@ -104,12 +104,12 @@ class RedditImageGenerator:
                 
                 .reddit-post {
                     background: #FFFFFF;
-                    border: 1px solid #EDEFF1;
+                    border: 3px solid #FF4500;
                     border-radius: 12px;
                     width: 1000px;
                     max-width: 90vw;
                     padding: 24px;
-                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+                    box-shadow: 0 15px 50px rgba(0, 0, 0, 0.6);
                     position: relative;
                     overflow: hidden;
                 }
@@ -144,11 +144,12 @@ class RedditImageGenerator:
                 
                 .post-title {
                     color: #222222;
-                    font-size: 28px;
-                    font-weight: 600;
+                    font-size: 36px;
+                    font-weight: 800;
                     line-height: 1.3;
                     margin-bottom: 20px;
                     word-wrap: break-word;
+                    text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
                 }
                 
                 .post-footer {

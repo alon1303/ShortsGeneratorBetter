@@ -8,6 +8,7 @@ import logging
 import tempfile
 import re
 import asyncio
+import math
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 import base64
@@ -421,7 +422,7 @@ class TitlePopupTimingCalculator:
         self.buffer_seconds = buffer_seconds
         
         # Animation parameters
-        self.pop_in_duration = 0.2  # seconds for scale animation
+        self.pop_in_duration = 0.8  # seconds for scale animation (Slow Pop In)
         self.display_duration = title_audio_duration  # Card disappears exactly when title audio ends
         
         # Calculate key timing points
@@ -440,39 +441,37 @@ class TitlePopupTimingCalculator:
     
     def get_ffmpeg_filter_for_animation(self, image_path: Path) -> str:
         """
-        Generate FFmpeg filter_complex string for pop-in animation with alpha preservation.
-        
-        Creates a scale animation that grows from 50px to 900px over pop_in_duration seconds,
-        then stays at full size until card_end_time, then disappears.
-        
-        Args:
-            image_path: Path to the overlay image (PNG with transparency)
-            
-        Returns:
-            FFmpeg filter_complex string for dynamic pop-in animation
+        Generate FFmpeg filter_complex string for advanced pop-in animation.
+        Uses sinusoidal easing for a smooth "ease-in" effect and alpha fade-out.
         """
         TARGET_W = 900
-        MIN_W = 50  # Minimum width to avoid 0 height calculation
+        MIN_W = 10  # Minimum width to avoid 'dsth out of range' error
+        ANIM_DURATION = self.pop_in_duration
+        FADE_DURATION = 0.5
         
-        # Calculate width: grow from MIN_W to TARGET_W over pop_in_duration seconds
-        # Use max(0, t - card_start_time) to avoid negative time values
-        # Use min(..., 1) to clamp growth factor between 0 and 1
-        width_expr = f"max({MIN_W}, {TARGET_W} * min(max(0, t-{self.card_start_time})/{self.pop_in_duration}, 1))"
+        # Sinusoidal easing: resize(0.0) to resize(1.0) using sin(t * pi/2)
+        # In FFmpeg: 900 * sin(min(t, ANIM_DURATION) * (PI/2) / ANIM_DURATION)
+        easing_expr = f"sin(min(max(0, t-{self.card_start_time}), {ANIM_DURATION}) * {math.pi/2} / {ANIM_DURATION})"
+        width_expr = f"max({MIN_W}, {TARGET_W} * {easing_expr})"
         
-        # Height: use FFmpeg's native aspect ratio preservation
-        # With -loop 1 and -framerate 30, the image has a continuous timeline
-        # so h=-1 works correctly with eval=frame
+        # Fade out at the end using the 'fade' filter on the overlay stream
+        # card_end_time is when it should be completely gone
+        fade_start = self.card_end_time - FADE_DURATION
+        
+        # Use format=rgba and fade filter for the most compatible transparency handling
         filter_str = (
-            f"[1:v]scale=w='{width_expr}':h=-1:eval=frame[overlay_scaled];"
-            f"[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:shortest=1:"
-            f"enable='between(t,{self.card_start_time},{self.card_end_time})'"
+            f"[1:v]scale=w='{width_expr}':h=-1:eval=frame,format=rgba,"
+            f"fade=t=out:st={fade_start:.3f}:d={FADE_DURATION:.1f}:alpha=1[animated];"
+            f"[0:v][animated]overlay=x=(W-w)/2:y=(H-h)/2:shortest=1:"
+            f"enable='between(t,{self.card_start_time:.2f},{self.card_end_time:.2f})'"
         )
         
         logger.debug(
-            f"Generated pop-in animation filter: "
+            f"Generated advanced animation filter: "
             f"card_start={self.card_start_time:.2f}s, "
             f"card_end={self.card_end_time:.2f}s, "
-            f"pop_in={self.pop_in_duration:.2f}s, "
+            f"anim_duration={ANIM_DURATION}s, "
+            f"fade_duration={FADE_DURATION}s, "
             f"target_width={TARGET_W}px, "
             f"min_width={MIN_W}px"
         )

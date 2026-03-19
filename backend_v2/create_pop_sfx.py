@@ -11,11 +11,11 @@ from pathlib import Path
 
 def generate_pop_sound(
     output_path: Path,
-    duration: float = 0.5,  # seconds
+    duration: float = 0.1,  # seconds
     sample_rate: int = 44100,  # Hz
-    frequency_start: int = 800,  # Hz
-    frequency_end: int = 200,  # Hz
-    volume: float = 0.3  # 0.0 to 1.0
+    frequency_start: int = 1000,  # Hz
+    frequency_end: int = 1000,  # Hz
+    volume: float = 0.5  # 0.0 to 1.0
 ) -> bool:
     """
     Generate a simple pop/chirp sound effect.

@@ -7,6 +7,7 @@ import logging
 import tempfile
 import subprocess
 import json
+import math
 import shutil
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
@@ -177,12 +178,12 @@ class VideoComposer:
             
             current_audio_path = audio_temp
             
-            # Mix pop SFX
+            # Mix pop SFX - Synchronized with title animation peak (t=0.6s)
             if pop_sfx_temp and pop_sfx_temp.exists():
                 mixed_audio_path = self.audio_mixer.mix_title_with_pop_sfx(
                     main_audio_path=audio_temp,
                     pop_sfx_path=pop_sfx_temp,
-                    pop_start_time=0.0,
+                    pop_start_time=0.6,
                     pop_volume_delta=-6.0,
                     output_path=temp_path / "audio_mixed.mp3"
                 )

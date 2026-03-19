@@ -6,17 +6,17 @@
     <title>Reddit Post Template</title>
     <style>
         :root {
-            --card-bg: #FFFFFF;
-            --card-border: #CCCCCC;
-            --text-primary: #222222;
-            --text-secondary: #878A8C;
-            --text-tertiary: #A4A7A9;
+            --card-bg: #1A1A1B;
+            --card-border: 1px solid #343536;
+            --text-primary: #D7DADC;
+            --text-secondary: #818384;
+            --text-tertiary: #707273;
             --accent-color: #FF4500;
             --upvote-color: #FF4500;
-            --flair-bg: #F6F7F8;
-            --flair-text: #545452;
-            --shadow-color: rgba(0, 0, 0, 0.15);
-            --divider-color: #EDEFF1;
+            --flair-bg: #272729;
+            --flair-text: #D7DADC;
+            --shadow-color: rgba(0, 0, 0, 0.8);
+            --divider-color: #343536;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -33,12 +33,11 @@
 
         .reddit-post-card {
             background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 14px;
+            border: var(--card-border);
+            border-radius: 15px;
             width: 650px; 
-            /* הריווח הפנימי הוגדל מ-24 ל-34 כדי למתוח את הגובה */
-            padding: 34px;
-            box-shadow: 0 12px 35px var(--shadow-color);
+            padding: 30px;
+            box-shadow: 0 8px 30px var(--shadow-color);
         }
 
         /* הגדלת הרווח בין הרכיבים כדי למתוח את הכרטיסייה למטה */
@@ -67,15 +66,16 @@
         .flair { background: var(--flair-bg); color: var(--flair-text); padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
         
         .post-title {
-            color: var(--text-primary);
-            font-size: 24px;
-            font-weight: 600;
-            line-height: 1.35;
-            margin-bottom: 24px; /* הוגדל */
+            color: #FFFFFF;
+            font-size: 38px;
+            font-weight: 800;
+            line-height: 1.25;
+            margin-bottom: 24px;
             overflow-wrap: break-word; 
             word-wrap: break-word;
             word-break: break-word;
             hyphens: auto;
+            letter-spacing: -0.5px;
         }
 
         .post-body { color: var(--text-primary); font-size: 18px; line-height: 1.55; margin-bottom: 28px; overflow-wrap: break-word; } /* הוגדל */
