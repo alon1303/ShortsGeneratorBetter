@@ -281,6 +281,7 @@ class EdgeTTSClient:
         text: str,
         voice: Optional[str] = None,
         use_cache: bool = True,
+        **kwargs,
     ) -> Tuple[Optional[Path], float, Optional[List[WordTimestamp]]]:
         """
         Convert text to speech using edge-tts with word-level timestamps.

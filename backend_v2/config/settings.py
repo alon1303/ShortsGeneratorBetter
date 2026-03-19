@@ -266,14 +266,8 @@ class Settings(BaseSettings):
                 if len(voice_name) == 20 and voice_name.isalnum():
                     return voice_name
 
-            # Return default ElevenLabs voice (if configured) or fallback
-            if self.is_elevenlabs_configured():
-                return self.ELEVENLABS_VOICE_ADAM
-            else:
-                # Fall back to Edge TTS if ElevenLabs not configured
-                logger = logging.getLogger(__name__)
-                logger.warning("ElevenLabs not configured, falling back to Edge TTS")
-                return self.EDGE_TTS_VOICE_FEMALE
+            # Return default ElevenLabs voice
+            return self.ELEVENLABS_VOICE_ADAM
         
         # Default case (shouldn't happen)
         return self.DEFAULT_VOICE_ID

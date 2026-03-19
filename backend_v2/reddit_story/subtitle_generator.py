@@ -813,7 +813,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     ) -> bool:
         """
         Generate ASS subtitles from plain text (without word timestamps).
-        TEMPORARILY DISABLED - Will raise exception to crash loudly.
         
         Args:
             text: Plain text
@@ -823,11 +822,24 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         Returns:
             True if successful, False otherwise
         """
-        raise RuntimeError(
-            "Fallback subtitle generation disabled. ElevenLabs API is returning 401: "
-            "'Unusual activity detected. Free Tier usage disabled.' "
-            "Need to fix API key or purchase paid plan."
-        )
+        try:
+            # Fallback strategy: create one phrase for the entire text
+            # This is not ideal but better than crashing if we have the audio
+            words = text.split()
+            word_timestamps = []
+            
+            # Simple linear distribution of words over duration
+            avg_word_duration = audio_duration / max(1, len(words))
+            for i, word in enumerate(words):
+                start = i * avg_word_duration
+                end = (i + 1) * avg_word_duration
+                word_timestamps.append(WordTimestamp(word=word, start=start, end=end, confidence=1.0))
+            
+            return self.generate_ass_from_word_timestamps(word_timestamps, audio_duration, output_path)
+            
+        except Exception as e:
+            logger.error(f"Failed to generate fallback subtitles: {e}")
+            return False
 
 
 # Utility function for direct use

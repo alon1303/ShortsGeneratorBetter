@@ -59,9 +59,15 @@ class TTSRouter:
                     cache_dir=self.config.cache_dir
                 )
             elif self.config.engine == "elevenlabs":
+                # Ensure the voice ID is valid for ElevenLabs (not an Edge TTS ID)
+                voice_id = self.config.voice_id
+                if voice_id and ("neural" in voice_id.lower() or "en-" in voice_id.lower()):
+                    logger.warning(f"Overriding Edge TTS voice '{voice_id}' with ElevenLabs default for ElevenLabs engine")
+                    voice_id = settings.get_voice_id("adam", engine="elevenlabs")
+                
                 # Fixed: Use 'voice' instead of 'voice_id' to match ElevenLabsClient.__init__
                 self._client = ElevenLabsClient(
-                    voice=self.config.voice_id,
+                    voice=voice_id,
                     cache_dir=self.config.cache_dir
                 )
             else:
@@ -77,6 +83,14 @@ class TTSRouter:
     ) -> Tuple[Optional[Path], float, Optional[List[WordTimestamp]]]:
         client = await self._get_client()
         voice = voice or self.config.voice_id
+        
+        logger.info(f"TTSRouter: engine={self.config.engine}, requested_voice={voice}")
+        
+        # Sanitize voice for ElevenLabs engine to prevent 400 errors
+        if self.config.engine == "elevenlabs" and voice:
+            if "neural" in voice.lower() or "en-" in voice.lower():
+                logger.warning(f"TTSRouter: Sanitizing Edge voice '{voice}' for ElevenLabs engine")
+                voice = None # Force client to use its own sanitized default
         
         logger.debug(f"Routing TTS request to {self.config.engine} engine")
         
@@ -167,6 +181,10 @@ async def generate_title_and_story_audio(
             shutil.copy2(final_audio_path, final_cache_path)
 
             # Mock timing data for preview
-            timing_data = {"title_duration": title_duration, "buffer": buffer_seconds, "title_word_count": len(title_timestamps) if title_timestamps else 0}
+            timing_data = {
+                "title_duration": title_duration, 
+                "buffer": buffer_seconds, 
+                "title_word_count": len(title_timestamps) if title_timestamps is not None else 0
+            }
             
             return final_cache_path, story_audio_chunks, title_duration, timing_data

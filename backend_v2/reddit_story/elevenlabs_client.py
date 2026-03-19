@@ -28,7 +28,15 @@ class ElevenLabsClient:
             raise ValueError("ELEVENLABS_API_KEY is not set in settings/env")
             
         self.client = ElevenLabs(api_key=self.api_key)
-        self.voice = voice or settings.get_voice_id("adam")
+        
+        # Ensure we don't use an Edge TTS voice ID (contains 'Neural' or 'en-') 
+        # when initialized, as ElevenLabs will return a 400 error.
+        voice_id = voice
+        if voice_id and ("neural" in voice_id.lower() or "en-" in voice_id.lower()):
+            logger.warning(f"Invalid ElevenLabs voice ID detected: {voice_id}. Forcing default Adam voice.")
+            voice_id = settings.get_voice_id("adam", engine="elevenlabs")
+            
+        self.voice = voice_id or settings.get_voice_id("adam", engine="elevenlabs")
         self.model = model
         self.cache_dir = cache_dir or settings.CACHE_DIR / "elevenlabs"
         self.voices_dir = self.cache_dir / "voices"
@@ -56,13 +64,20 @@ class ElevenLabsClient:
         text: str,
         voice: Optional[str] = None,
         use_cache: bool = True,
+        **kwargs,
     ) -> Tuple[Optional[Path], float, Optional[List[WordTimestamp]]]:
         """
         Convert text to speech. 
         Note: Free ElevenLabs API doesn't easily provide word-level timestamps in a single call 
         like Edge-TTS. This version focuses on fixing the 'generate' error first.
         """
-        voice_id = voice or self.voice
+        # Validate voice ID - prevent Edge TTS strings from reaching ElevenLabs API
+        voice_id = voice
+        if voice_id and ("neural" in voice_id.lower() or "en-" in voice_id.lower()):
+            logger.warning(f"Invalid voice argument for ElevenLabs: {voice_id}. Using self.voice instead.")
+            voice_id = self.voice
+        
+        voice_id = voice_id or self.voice
         cache_key = self._generate_cache_key(text, voice_id)
         
         if use_cache:
@@ -108,7 +123,7 @@ class ElevenLabsClient:
     ) -> List[AudioChunk]:
         chunks = []
         for text in text_chunks:
-            path, duration, _ = await self.text_to_speech_with_timestamps(text, voice)
+            path, duration, _ = await self.text_to_speech_with_timestamps(text, voice, **kwargs)
             chunks.append(AudioChunk(
                 chunk_id=str(uuid.uuid4())[:8],
                 text=text,
