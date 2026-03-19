@@ -37,6 +37,12 @@ except ImportError:
 class RedditImageGenerator:
     """Generates Reddit post overlay images using Playwright and Jinja2 templates."""
     
+    # viral/emotional words to highlight automatically
+    POWER_KEYWORDS = {
+        'AITA', 'ASSHOLE', 'MOM', 'BROTHER', 'SAVINGS', 'REFUSING', 'DEMANDED', 
+        'TOOK', 'LEFT', 'MONEY', 'HOUSE', 'WIFE', 'UPDATE', 'ILLEGAL', 'CAUGHT'
+    }
+
     def __init__(self, output_dir: Optional[Path] = None, template_dir: Optional[Path] = None):
         """
         Initialize Reddit image generator with Playwright and Jinja2.
@@ -137,6 +143,47 @@ class RedditImageGenerator:
         times = ["5h ago", "3h ago", "8h ago", "1d ago", "2d ago", "1w ago"]
         return random.choice(times)
     
+    def _apply_highlights(self, text: str) -> str:
+        """
+        Apply red highlights to dramatic words in the text.
+        Highlights ALL CAPS words (2+ letters) and POWER_KEYWORDS (case-insensitive).
+        Handles punctuation and possessives correctly.
+        """
+        if not text:
+            return text
+            
+        words = text.split()
+        highlighted_words = []
+        
+        for word in words:
+            # Strip punctuation for keyword checking (e.g., "MOM'S," -> "MOMS")
+            clean_word = re.sub(r'[^\w]', '', word).upper()
+            
+            # Remove 'S from the end of clean_word for power keyword checking (e.g. "MOMS" -> "MOM")
+            base_clean_word = clean_word
+            if clean_word.endswith('S') and len(clean_word) > 1:
+                # Check if it was originally something like MOM'S
+                if "'S" in word.upper() or (word.upper().endswith('S') and clean_word[:-1] in self.POWER_KEYWORDS):
+                    base_clean_word = clean_word[:-1]
+
+            # Condition 1: Word is ALL CAPS (at least 2 letters in clean word)
+            # We check the original word part before punctuation
+            is_all_caps = False
+            alpha_part = re.sub(r'[^A-Z]', '', word)
+            if len(alpha_part) >= 2 and alpha_part == re.sub(r'[^a-zA-Z]', '', word):
+                 is_all_caps = True
+
+            # Condition 2: Word (or its base) is in POWER_KEYWORDS
+            is_power_word = clean_word in self.POWER_KEYWORDS or base_clean_word in self.POWER_KEYWORDS
+            
+            if is_all_caps or is_power_word:
+                # To preserve punctuation outside the span if possible, but simplest is to wrap the whole "word" token
+                highlighted_words.append(f'<span class="highlight">{word}</span>')
+            else:
+                highlighted_words.append(word)
+                
+        return " ".join(highlighted_words)
+
     def _render_template(self, template_data: Dict[str, Any]) -> str:
         """
         Render HTML template using Jinja2.
@@ -196,9 +243,22 @@ class RedditImageGenerator:
             author_display = author or "Anonymous"
             comments_display = comments or max(score // 10, 1)  # Estimate comments if not provided
             
+            # Apply highlighting to the title
+            highlighted_title = self._apply_highlights(title)
+            
+            # Load and encode profile picture to Base64
+            avatar_base64 = ""
+            profile_pic_path = self.template_dir / "channels_profile.jpg"
+            if profile_pic_path.exists():
+                try:
+                    with open(profile_pic_path, "rb") as img_file:
+                        avatar_base64 = base64.b64encode(img_file.read()).decode('utf-8')
+                except Exception as e:
+                    logger.warning(f"Failed to encode profile picture to Base64: {e}")
+            
             # Prepare template data
             template_data = {
-                "title": title,
+                "title": highlighted_title,
                 "subreddit": subreddit,
                 "author": author_display,
                 "flair": flair,
@@ -209,6 +269,7 @@ class RedditImageGenerator:
                 "time_ago": self._get_time_ago(),
                 "theme_mode": theme_mode,
                 "body": body,
+                "avatar_base64": avatar_base64,
             }
             
             # Render HTML template
@@ -239,9 +300,9 @@ class RedditImageGenerator:
                 logger.info(f"Taking screenshot with transparent background: {output_path}")
                 
                 # Get the bounding box of the post card
-                card_element = await page.query_selector('.reddit-post-card')
+                card_element = await page.query_selector('.post-card')
                 if not card_element:
-                    logger.warning("Could not find .reddit-post-card element, capturing full page")
+                    logger.warning("Could not find .post-card element, capturing full page")
                     await page.screenshot(
                         path=str(output_path),
                         type='png',
@@ -445,7 +506,7 @@ class TitlePopupTimingCalculator:
         This approach statically scales the image once and animates Y/Alpha,
         preventing overlay clipping bugs and making rendering 100x faster.
         """
-        TARGET_W = 900
+        TARGET_W = 950
         # Make the animation slightly faster for a snappier feel
         ANIM_DURATION = self.pop_in_duration / 2  
         FADE_DURATION = 0.5
@@ -453,14 +514,15 @@ class TitlePopupTimingCalculator:
         # Calculate when to start the fade out
         fade_start = self.card_end_time - FADE_DURATION
         
-        # 1. Statically scale the image once to 900px (fast) and add Alpha transitions
+        # 1. Statically scale the image once to 950px (fast) and add Alpha transitions
         # 2. Animate the 'y' parameter in the overlay filter to create a slide-up effect
+        # Position at y=(H-h)/3 instead of center (H-h)/2
         filter_str = (
             f"[1:v]scale={TARGET_W}:-1,format=rgba,"
             f"fade=t=in:st={self.card_start_time:.3f}:d={ANIM_DURATION:.1f}:alpha=1,"
             f"fade=t=out:st={fade_start:.3f}:d={FADE_DURATION:.1f}:alpha=1[animated];"
             f"[0:v][animated]overlay=x=(W-w)/2:"
-            f"y='min((H-h)/2 + 100 - 100*min(max(t-{self.card_start_time:.3f},0)/{ANIM_DURATION:.3f},1), (H-h)/2)':"
+            f"y='min((H-h)/3 + 100 - 100*min(max(t-{self.card_start_time:.3f},0)/{ANIM_DURATION:.3f},1), (H-h)/3)':"
             f"enable='between(t,{self.card_start_time:.2f},{self.card_end_time:.2f})'"
         )
         

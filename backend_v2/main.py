@@ -458,6 +458,7 @@ async def process_reddit_story_background(job_id: str, request: RedditStoryReque
         title_card_path = post_output_dir / "title_card.png"
         
         # Call async method directly since we're already in an async context
+        # Branding "@Karma Reads" is now handled inside the template
         output_path = await title_card_generator.generate_reddit_post_image(
             title=story.title,
             subreddit=story.subreddit,
