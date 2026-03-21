@@ -194,7 +194,7 @@ class VideoComposer:
                             title_audio_duration=timing_data['title_audio_duration'],
                             buffer_seconds=timing_data['buffer_seconds']
                         )
-                        filter_complex = calculator.get_ffmpeg_filter_for_animation(overlay_temp, card_end_time=card_end)
+                        filter_complex = calculator.get_ffmpeg_filter_for_animation(overlay_temp)
                     else:
                         filter_complex = (
                             f'[1:v]scale=900:-1[overlay_scaled];'
