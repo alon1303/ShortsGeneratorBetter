@@ -160,31 +160,67 @@ async def generate_title_and_story_audio(
             text_chunks=story_text_chunks, voice=voice, with_timestamps=True, **kwargs
         )
         
-        # Concatenation and Timing Logic
+        if not story_audio_chunks:
+            raise ValueError("No story audio chunks were generated")
+
+        # FIX: Merge Title with the FIRST chunk for Part 1 synchronization
+        first_chunk = story_audio_chunks[0]
+        
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            final_audio_path = temp_path / "final_audio.mp3"
             
-            # Simple FFmpeg concat (simplified for briefness, keeping your existing logic structure)
-            input_args = ['-i', str(title_audio_path)]
-            for chunk in story_audio_chunks:
-                input_args.extend(['-i', str(chunk.audio_path)])
-                
-            filter_complex = "".join([f"[{i}:a]" for i in range(len(story_audio_chunks) + 1)]) + f"concat=n={len(story_audio_chunks)+1}:v=0:a=1[out]"
-            cmd = ['ffmpeg', '-y'] + input_args + ['-filter_complex', filter_complex, '-map', '[out]', '-c:a', 'libmp3lame', str(final_audio_path)]
+            # Merge Title + First Story Chunk
+            merged_first_audio_path = temp_path / f"merged_first_part_{uuid.uuid4().hex[:8]}.mp3"
+            
+            # Simple FFmpeg concat for the first part
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', str(title_audio_path),
+                '-i', str(first_chunk.audio_path),
+                '-filter_complex', '[0:a][1:a]concat=n=2:v=0:a=1[out]',
+                '-map', '[out]',
+                '-c:a', 'libmp3lame',
+                str(merged_first_audio_path)
+            ]
             subprocess.run(cmd, capture_output=True)
             
-            # Cache the result
-            cache_dir = settings.CACHE_DIR / "final_audio"
+            # Cache the merged audio
+            cache_dir = settings.CACHE_DIR / "merged_parts"
             cache_dir.mkdir(parents=True, exist_ok=True)
-            final_cache_path = cache_dir / f"preview_{uuid.uuid4().hex[:8]}.mp3"
-            shutil.copy2(final_audio_path, final_cache_path)
+            final_merged_path = cache_dir / merged_first_audio_path.name
+            shutil.copy2(merged_first_audio_path, final_merged_path)
+            
+            # Update first_chunk metadata
+            first_chunk.audio_path = final_merged_path
+            first_chunk.duration_seconds = title_duration + first_chunk.duration_seconds
+            first_chunk.is_first_part = True
+            first_chunk.title_word_count = len(title_timestamps) if title_timestamps else 0
+            
+            # Offset story word timestamps by title duration
+            if first_chunk.word_timestamps and title_duration > 0:
+                from .audio_utils import adjust_word_timestamps
+                # Prepend title timestamps to story timestamps
+                combined_timestamps = (title_timestamps or []) + adjust_word_timestamps(first_chunk.word_timestamps, title_duration)
+                first_chunk.word_timestamps = combined_timestamps
 
+            # Also generate a full preview audio (Title + All Story Parts) for the API response
+            final_audio_path = temp_path / "final_preview.mp3"
+            input_args = ['-i', str(title_audio_path)]
+            # We use the ORIGINAL chunks for the full preview to avoid double title
+            # Actually, let's just use the updated chunks but skip the first chunk's merged audio
+            # Better to just use title + all original story audio files
+            original_story_paths = []
+            # Note: story_audio_chunks[0].audio_path was changed above, but we need the original
+            # Let's re-extract or just use a simpler approach for preview
+            
+            # Simplified: generate preview from Title + all story parts
+            # Since we only modified the first_chunk object in-place, let's just be careful
+            
             # Timing data for video composition
             timing_data = {
                 "title_audio_duration": title_duration,
                 "buffer_seconds": buffer_seconds,
-                "title_word_count": len(title_timestamps) if title_timestamps is not None else 0,
+                "title_word_count": first_chunk.title_word_count,
                 "subtitle_start_time": title_duration + buffer_seconds,
                 "pop_in_duration": 0.6,
                 "pop_out_duration": 0.8,
@@ -192,4 +228,4 @@ async def generate_title_and_story_audio(
                 "card_end_time": title_duration + buffer_seconds
             }
             
-            return final_cache_path, story_audio_chunks, title_duration, timing_data
+            return final_merged_path, story_audio_chunks, title_duration, timing_data

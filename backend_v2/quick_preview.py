@@ -10,9 +10,7 @@ import sys
 import argparse
 import asyncio
 import tempfile
-import uuid
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
 
 # Configure logging
 logging.basicConfig(
@@ -21,19 +19,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Add backend_v2 to the Python path
-backend_path = Path(__file__).parent / "backend_v2"
-sys.path.insert(0, str(backend_path))
+# Add current directory to the Python path (since it's now inside backend_v2)
+sys.path.insert(0, str(Path(__file__).parent))
 
-from reddit_story.image_generator_new import RedditImageGenerator, TitlePopupTimingCalculator
-from reddit_story.edgetts_client import EdgeTTSClient
-from reddit_story.elevenlabs_client import ElevenLabsClient  # Added ElevenLabs support
+from reddit_story.image_generator_new import RedditImageGenerator
 from reddit_story.video_composer import VideoComposer
 from reddit_story.background_manager import BackgroundManager
 from reddit_story.subtitle_generator import SubtitleGenerator
-from reddit_story.audio_mixer import AudioMixer
-from reddit_story.tts_router import get_tts_client, generate_title_and_story_audio
-from reddit_story.models import AudioChunk, WordTimestamp
+from reddit_story.tts_router import generate_title_and_story_audio
 from config.settings import settings
 
 
@@ -65,16 +58,22 @@ async def create_production_preview() -> Path:
         output_path = Path("production_preview.mp4")
         
         # Step 1: Generate Audio using the configured TTS Engine (Edge or ElevenLabs)
-        logger.info(f"Step 1/6: Generating audio using engine: {settings.TTS_ENGINE}")
+        # For preview, we force Edge TTS if ElevenLabs is not configured
+        engine = settings.TTS_ENGINE
+        if engine == "elevenlabs" and not settings.is_elevenlabs_configured():
+            logger.warning("ElevenLabs API key not set, falling back to Edge TTS for preview")
+            engine = "edge"
+            
+        logger.info(f"Step 1/6: Generating audio using engine: {engine}")
         
         # Get the correct voice ID based on settings
-        voice_id = settings.get_voice_id()
+        voice_id = settings.get_voice_id(engine=engine)
         
         final_audio_path, audio_chunks, title_duration, timing_data = await generate_title_and_story_audio(
             title=title_text,
             story_text_chunks=story_chunks,
             voice=voice_id,
-            engine=settings.TTS_ENGINE
+            engine=engine
         )
         
         # Step 2: Generate Title Card
@@ -83,34 +82,52 @@ async def create_production_preview() -> Path:
         
         # Step 3: Get Background Video
         logger.info("Step 3/6: Selecting background video...")
-        bg_manager = BackgroundManager()
+        bg_manager = BackgroundManager(settings.BACKGROUNDS_DIR)
+        
+        # Try to find any background if the default theme is empty
         bg_video = bg_manager.get_random_background(settings.DEFAULT_BACKGROUND_THEME)
         
         if not bg_video:
-            raise RuntimeError("No background videos found. Please add videos to assets/backgrounds")
+            # Try "food" or "oddly satisfying" which we saw had videos
+            for theme in ["food", "oddly satisfying"]:
+                logger.info(f"Retrying with theme: {theme}")
+                bg_video = bg_manager.get_random_background(theme)
+                if bg_video:
+                    break
+        
+        if not bg_video:
+            raise RuntimeError(f"No background videos found in {settings.BACKGROUNDS_DIR}. Please add videos to assets/backgrounds")
 
         # Step 4: Generate Subtitles
         logger.info("Step 4/6: Generating subtitles...")
         sub_gen = SubtitleGenerator()
         subtitle_path = temp_dir / "subtitles.ass"
-        sub_gen.generate_subtitles(audio_chunks, subtitle_path)
+        
+        # audio_chunks is a list of AudioChunk objects from generate_title_and_story_audio
+        # We need the word_timestamps from the first chunk (which includes title)
+        word_timestamps = audio_chunks[0].word_timestamps if audio_chunks else []
+        
+        # Calculate total duration for subtitles
+        total_audio_duration = audio_chunks[0].duration_seconds if audio_chunks else 0
+        
+        sub_gen.generate_ass_from_word_timestamps(
+            word_timestamps=word_timestamps,
+            audio_duration=total_audio_duration,
+            output_path=subtitle_path
+        )
         
         # Step 5: Compose Video
         logger.info("Step 5/6: Composing final video...")
         composer = VideoComposer()
         
-        # We only want a few seconds for the preview
-        preview_duration = min(title_duration + 5.0, 10.0) 
-        
-        composer.compose_video(
-            background_path=bg_video,
-            audio_path=final_audio_path,
-            subtitle_path=subtitle_path,
+        # We use create_complete_shorts_video since it's the main production method
+        # audio_chunks[0] already contains merged title + first part
+        output_path = composer.create_complete_shorts_video(
+            audio_chunks=[audio_chunks[0]], # Only use first chunk for preview
+            theme=None, # Uses default theme
             output_path=output_path,
-            title_card_path=title_card_path,
-            title_duration=title_duration,
-            timing_data=timing_data,
-            max_duration=preview_duration
+            overlay_image_path=title_card_path,
+            pop_sfx_path=None # Settings will handle this if configured
         )
         
         logger.info("Step 6/6: Verifying output...")

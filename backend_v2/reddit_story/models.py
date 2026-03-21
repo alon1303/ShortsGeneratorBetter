@@ -45,6 +45,8 @@ class AudioChunk:
     voice_id: str
     file_size_bytes: int
     word_timestamps: Optional[List[WordTimestamp]] = None
+    is_first_part: bool = False
+    title_word_count: int = 0
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""

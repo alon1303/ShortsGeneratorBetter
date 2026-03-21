@@ -536,6 +536,8 @@ async def process_reddit_story_background(job_id: str, request: RedditStoryReque
                 # For the first part, include title card with timing data
                 # For subsequent parts, don't include title card
                 if i == 1:
+                    # Ensure the first chunk is marked as such and has title info
+                    # In tts_router, we already merged the title into audio_chunk[0]
                     video_part = composer.create_video_part(
                         audio_chunk=audio_chunk,
                         theme=request.theme,

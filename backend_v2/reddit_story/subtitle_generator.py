@@ -764,7 +764,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         word_timestamps: List[WordTimestamp],
         title_word_count: int,
         audio_duration: float,
-        output_path: Path
+        output_path: Path,
+        min_start_time: Optional[float] = None
     ) -> Tuple[bool, float]:
         """
         Generate ASS subtitles for story only, filtering out title words.
@@ -774,6 +775,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             title_word_count: Number of words in the title (to filter out)
             audio_duration: Total audio duration (including title)
             output_path: Path to save ASS file
+            min_start_time: Optional floor for the first story subtitle (e.g., Title Card end time)
             
         Returns:
             Tuple of (success, title_duration)
@@ -783,6 +785,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             story_timestamps, title_duration = self.filter_and_adjust_timestamps(
                 word_timestamps, title_word_count
             )
+            
+            # If min_start_time is provided (e.g. Title Card duration + buffer),
+            # ensure no story subtitle starts before it.
+            if min_start_time is not None and story_timestamps:
+                first_word_start = story_timestamps[0].start
+                if first_word_start < min_start_time:
+                    logger.info(f"Adjusting first story word start from {first_word_start:.3f}s to {min_start_time:.3f}s to avoid Title Card overlap")
+                    # Shift the first word's start time to min_start_time
+                    # We only shift the START of the first word to avoid visual overlap
+                    # The end time stays the same to maintain sync with audio
+                    story_timestamps[0].start = min_start_time
             
             # Calculate story duration for logging
             story_duration = audio_duration - title_duration

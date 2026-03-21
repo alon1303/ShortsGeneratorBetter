@@ -97,6 +97,7 @@ backend_v2/
 ├── config/
 │   └── settings.py        # Configuration management
 ├── main.py               # FastAPI application
+├── quick_preview.py      # Quick preview generation tool
 └── tests/                # Test files
 ```
 

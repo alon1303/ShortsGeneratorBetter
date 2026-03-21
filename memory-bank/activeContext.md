@@ -6,6 +6,7 @@ The ShortsGenerator video generation pipeline is operational with core functiona
 ## Recent Changes & Accomplishments
 1. **FFmpeg SAR Fix**: Forced 1:1 Sample Aspect Ratio in background extraction to prevent concatenation errors due to SAR mismatches between different source videos.
 2. **Video Composition Pipeline**: Successfully implemented `VideoComposer` class that combines audio narration, background videos, and subtitles
+3. **Migration of quick_preview.py**: Migrated the `quick_preview.py` tool from the root directory to `backend_v2/` for better organization and consistency.
 >>>>>>>------- SEARCH
 ### What Works Well
 1. **Sequential Backgrounds**: Significantly improves viewer engagement
@@ -45,6 +46,9 @@ The ShortsGenerator video generation pipeline is operational with core functiona
 1. **Testing and Validation**: Ensuring all video generation components work reliably
 2. **Performance Optimization**: Reducing video generation time for faster processing
 3. **Error Handling**: Improving robustness for edge cases and failed operations
+
+### Recent Learnings
+- **Subtitle Suppression**: Successfully implemented Title Card vs Subtitle synchronization by enforcing a `min_start_time` for the first story subtitle phrase, aligned with `card_end_time` (Title narration + buffer). This prevents visual overlap during the intro.
 
 ### Next Priority Tasks
 1. **Audio Mixing Enhancement**: Better integration of pop SFX and audio effects

@@ -79,7 +79,9 @@ class VideoComposer:
         word_timestamps: Optional[List[WordTimestamp]] = None,
         audio_path: Optional[Path] = None,
         title_offset: float = 0.0,
-        title_word_count: int = 0
+        title_word_count: int = 0,
+        is_first_part: bool = False,
+        timing_data: Optional[Dict[str, Any]] = None
     ) -> bool:
         generator = SubtitleGenerator(
             video_width=1080,
@@ -98,16 +100,28 @@ class VideoComposer:
         
         if adjusted_word_timestamps:
             if title_word_count > 0:
+                # Extract min_start_time from timing_data if available
+                # This ensures subtitles wait for Title Card + Buffer to finish
+                min_start_time = None
+                if timing_data and 'card_end_time' in timing_data:
+                    min_start_time = timing_data['card_end_time']
+                
+                # If it's the first part, timestamps already include title offset
+                # We use generate_ass_with_title_filter which EXCLUDES the title words from display
+                # but respects their duration for the story start time
                 success, _ = generator.generate_ass_with_title_filter(
                     word_timestamps=adjusted_word_timestamps,
                     title_word_count=title_word_count,
-                    audio_duration=audio_duration + title_offset,
-                    output_path=output_path
+                    audio_duration=audio_duration, # Use actual merged duration
+                    output_path=output_path,
+                    min_start_time=min_start_time
                 )
                 if not success:
                     raise RuntimeError("Failed to generate subtitles with title filter")
                 return True
             else:
+                # For non-first parts, we might still have a title_offset if we want a global delay
+                # but typically title_offset is 0 for parts 2+
                 if title_offset > 0 and adjusted_word_timestamps:
                     adjusted_word_timestamps = adjust_word_timestamps(adjusted_word_timestamps, title_offset)
                 
@@ -382,7 +396,9 @@ class VideoComposer:
                 word_timestamps=audio_chunk.word_timestamps,
                 audio_path=audio_chunk.audio_path,
                 title_offset=title_offset,
-                title_word_count=title_word_count
+                title_word_count=title_word_count,
+                is_first_part=audio_chunk.is_first_part,
+                timing_data=timing_data
             )
             
             success = self.combine_audio_with_background(

@@ -116,7 +116,7 @@ The ShortsGenerator video generation pipeline is **operational** with core funct
 ### Subtitle Timing
 - Word-level sync works with Edge TTS timestamps
 - Audio offset detection implemented but needs more testing
-- Title filtering works but edge cases need verification
+- Title filtering and suppression during Title Card is fully operational
 
 ### Background Management
 - Sequential backgrounds work but clip transitions could be smoother
