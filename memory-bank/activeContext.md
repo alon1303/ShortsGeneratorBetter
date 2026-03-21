@@ -48,7 +48,7 @@ The ShortsGenerator video generation pipeline is operational with core functiona
 3. **Error Handling**: Improving robustness for edge cases and failed operations
 
 ### Recent Learnings
-- **Subtitle Suppression**: Successfully implemented Title Card vs Subtitle synchronization by enforcing a `min_start_time` for the first story subtitle phrase, aligned with `card_end_time` (Title narration + buffer). This prevents visual overlap during the intro.
+- **Subtitle Suppression**: Successfully implemented a robust Title Card vs Subtitle synchronization system. By enforcing a strict `min_start_time` at both the phrase and individual word levels within `SubtitleGenerator`, story subtitles are guaranteed to stay silent until the Title Card duration (narration + buffer) has fully elapsed, preventing visual overlap.
 
 ### Next Priority Tasks
 1. **Audio Mixing Enhancement**: Better integration of pop SFX and audio effects
