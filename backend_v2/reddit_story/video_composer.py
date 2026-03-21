@@ -358,7 +358,8 @@ class VideoComposer:
         output_path: Optional[Path] = None,
         overlay_image_path: Optional[Path] = None,
         pop_sfx_path: Optional[Path] = None,
-        bg_music_path: Optional[Path] = None
+        bg_music_path: Optional[Path] = None,
+        timing_data: Optional[Dict[str, Any]] = None
     ) -> Path:
         if output_path is None:
             output_path = settings.OUTPUT_DIR / f"shorts_{uuid.uuid4()}.mp4"
@@ -369,7 +370,8 @@ class VideoComposer:
                 audio_chunk=chunk, theme=theme,
                 overlay_image_path=overlay_image_path if i == 1 else None,
                 pop_sfx_path=pop_sfx_path if i == 1 else None,
-                bg_music_path=bg_music_path
+                bg_music_path=bg_music_path,
+                timing_data=timing_data if i == 1 else None
             )
             if part:
                 video_parts.append(part)
@@ -380,5 +382,5 @@ class VideoComposer:
             self.concatenate_videos(video_parts, output_path)
         return output_path
 
-def create_shorts_video(audio_chunks, theme=None, output_path=None, overlay_image_path=None, pop_sfx_path=None, bg_music_path=None):
-    return VideoComposer().create_complete_shorts_video(audio_chunks, theme, output_path, overlay_image_path, pop_sfx_path, bg_music_path)
+def create_shorts_video(audio_chunks, theme=None, output_path=None, overlay_image_path=None, pop_sfx_path=None, bg_music_path=None, timing_data=None):
+    return VideoComposer().create_complete_shorts_video(audio_chunks, theme, output_path, overlay_image_path, pop_sfx_path, bg_music_path, timing_data=timing_data)

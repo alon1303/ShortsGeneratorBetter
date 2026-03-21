@@ -163,21 +163,35 @@ async def generate_title_and_story_audio(
         if not story_audio_chunks:
             raise ValueError("No story audio chunks were generated")
 
-        # FIX: Merge Title with the FIRST chunk for Part 1 synchronization
+        # Merge Title with the FIRST chunk for Part 1 synchronization
         first_chunk = story_audio_chunks[0]
+        
+        # Calculate the exact timings for the gap
+        actual_buffer = max(0.5, float(buffer_seconds))
+        pop_out_duration = 0.8
+        
+        # Card end time is exactly when the card begins its exit animation
+        card_end_time = title_duration + actual_buffer
+        
+        # The total gap is the buffer + the time it takes the card to disappear
+        total_gap = actual_buffer + pop_out_duration
+        delay_ms = int(total_gap * 1000)
+        
+        # The time the story subtitles and audio should actually start
+        story_start_time = title_duration + total_gap
         
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             
-            # Merge Title + First Story Chunk
+            # Merge Title + First Story Chunk with silence gap
             merged_first_audio_path = temp_path / f"merged_first_part_{uuid.uuid4().hex[:8]}.mp3"
             
-            # Simple FFmpeg concat for the first part
+            # Complex FFmpeg filter: adds a delay to the story audio, then concatenates
             cmd = [
                 'ffmpeg', '-y',
                 '-i', str(title_audio_path),
                 '-i', str(first_chunk.audio_path),
-                '-filter_complex', '[0:a][1:a]concat=n=2:v=0:a=1[out]',
+                '-filter_complex', f'[1:a]adelay={delay_ms}|{delay_ms}[delayed_story];[0:a][delayed_story]concat=n=2:v=0:a=1[out]',
                 '-map', '[out]',
                 '-c:a', 'libmp3lame',
                 str(merged_first_audio_path)
@@ -190,43 +204,29 @@ async def generate_title_and_story_audio(
             final_merged_path = cache_dir / merged_first_audio_path.name
             shutil.copy2(merged_first_audio_path, final_merged_path)
             
-            # Update first_chunk metadata
+            # Update first_chunk metadata adding the total_gap to duration
             first_chunk.audio_path = final_merged_path
-            first_chunk.duration_seconds = title_duration + first_chunk.duration_seconds
+            first_chunk.duration_seconds = title_duration + total_gap + first_chunk.duration_seconds
             first_chunk.is_first_part = True
             first_chunk.title_word_count = len(title_timestamps) if title_timestamps else 0
             
-            # Offset story word timestamps by title duration
+            # Offset story word timestamps by title duration + total_gap (story_start_time)
             if first_chunk.word_timestamps and title_duration > 0:
                 from .audio_utils import adjust_word_timestamps
                 # Prepend title timestamps to story timestamps
-                combined_timestamps = (title_timestamps or []) + adjust_word_timestamps(first_chunk.word_timestamps, title_duration)
+                combined_timestamps = (title_timestamps or []) + adjust_word_timestamps(first_chunk.word_timestamps, story_start_time)
                 first_chunk.word_timestamps = combined_timestamps
 
-            # Also generate a full preview audio (Title + All Story Parts) for the API response
-            final_audio_path = temp_path / "final_preview.mp3"
-            input_args = ['-i', str(title_audio_path)]
-            # We use the ORIGINAL chunks for the full preview to avoid double title
-            # Actually, let's just use the updated chunks but skip the first chunk's merged audio
-            # Better to just use title + all original story audio files
-            original_story_paths = []
-            # Note: story_audio_chunks[0].audio_path was changed above, but we need the original
-            # Let's re-extract or just use a simpler approach for preview
-            
-            # Simplified: generate preview from Title + all story parts
-            # Since we only modified the first_chunk object in-place, let's just be careful
-            
             # Timing data for video composition
-            card_end_time = title_duration + buffer_seconds
             timing_data = {
                 "title_audio_duration": title_duration,
-                "buffer_seconds": buffer_seconds,
+                "buffer_seconds": actual_buffer,
                 "title_word_count": first_chunk.title_word_count,
-                "subtitle_start_time": card_end_time,
+                "subtitle_start_time": story_start_time,
                 "pop_in_duration": 0.6,
-                "pop_out_duration": 0.8,
+                "pop_out_duration": pop_out_duration,
                 "card_start_time": 0.0,
                 "card_end_time": card_end_time
             }
             
-            return final_merged_path, story_audio_chunks, card_end_time, timing_data
+            return final_merged_path, story_audio_chunks, story_start_time, timing_data

@@ -393,7 +393,7 @@ class AutoPipeline:
                 voice=self.voice_id,
                 title_voice=self.voice_id,
                 engine=settings.TTS_ENGINE.lower(),
-                buffer_seconds=0.0,
+                buffer_seconds=1.0,  # Changed from 0.0 to 1.0 to give proper lingering time
             )
             
             logger.info(f"Audio generated: {len(story_audio_chunks)} parts, title: {title_duration:.2f}s")

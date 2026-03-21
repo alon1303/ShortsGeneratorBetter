@@ -127,7 +127,8 @@ async def create_production_preview() -> Path:
             theme=None, # Uses default theme
             output_path=output_path,
             overlay_image_path=title_card_path,
-            pop_sfx_path=None # Settings will handle this if configured
+            pop_sfx_path=None, # Settings will handle this if configured
+            timing_data=timing_data
         )
         
         logger.info("Step 6/6: Verifying output...")
