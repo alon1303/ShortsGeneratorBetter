@@ -145,7 +145,7 @@ async def generate_title_and_story_audio(
     story_text_chunks: List[str],
     voice: Optional[str] = None,
     engine: Optional[str] = None,
-    buffer_seconds: float = 0.0,
+    buffer_seconds: float = 0.5,
     **kwargs,
 ) -> Tuple[Path, List[AudioChunk], float, Dict[str, Any]]:
     
@@ -217,15 +217,16 @@ async def generate_title_and_story_audio(
             # Since we only modified the first_chunk object in-place, let's just be careful
             
             # Timing data for video composition
+            card_end_time = title_duration + buffer_seconds
             timing_data = {
                 "title_audio_duration": title_duration,
                 "buffer_seconds": buffer_seconds,
                 "title_word_count": first_chunk.title_word_count,
-                "subtitle_start_time": title_duration + buffer_seconds,
+                "subtitle_start_time": card_end_time,
                 "pop_in_duration": 0.6,
                 "pop_out_duration": 0.8,
                 "card_start_time": 0.0,
-                "card_end_time": title_duration + buffer_seconds
+                "card_end_time": card_end_time
             }
             
-            return final_merged_path, story_audio_chunks, title_duration, timing_data
+            return final_merged_path, story_audio_chunks, card_end_time, timing_data

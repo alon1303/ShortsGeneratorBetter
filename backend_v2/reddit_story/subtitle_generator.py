@@ -175,11 +175,16 @@ class SubtitleGenerator:
         events = []
         min_start_ms = int(min_start_time * 1000)
         for i, current_word in enumerate(phrase.words):
-            start_ms = max(min_start_ms, int(current_word.start * 1000))
+            # Enforce min_start_time floor
+            word_start_ms = int(current_word.start * 1000)
+            word_end_ms = int(current_word.end * 1000)
+            
+            start_ms = max(min_start_ms, word_start_ms)
+            
             if i + 1 < len(phrase.words):
                 end_ms = max(min_start_ms, int(phrase.words[i + 1].start * 1000))
             else:
-                end_ms = max(min_start_ms, int(current_word.end * 1000))
+                end_ms = max(min_start_ms, word_end_ms)
             
             # Ensure start < end
             if start_ms >= end_ms:

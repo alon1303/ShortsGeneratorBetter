@@ -494,20 +494,21 @@ async def process_reddit_story_background(job_id: str, request: RedditStoryReque
         
         # Generate title and story audio with timing data
         from reddit_story.tts_router import generate_title_and_story_audio
-        final_audio_path, story_audio_chunks, title_duration, timing_data = await generate_title_and_story_audio(
+        final_audio_path, story_audio_chunks, card_end_time, timing_data = await generate_title_and_story_audio(
             title=story.title,
             story_text_chunks=text_chunks,
             voice=request.voice_id,
             title_voice=request.voice_id,
             engine=settings.TTS_ENGINE.lower(),
-            buffer_seconds=0.0,
+            buffer_seconds=0.5,
         )
         
         _jobs[job_id]["message"] = f"Audio generated for {len(story_audio_chunks)} parts"
         _jobs[job_id]["progress"] = 0.7
         
         # Store timing data in metadata
-        _jobs[job_id]["metadata"]["title_duration"] = title_duration
+        _jobs[job_id]["metadata"]["title_duration"] = timing_data.get("title_audio_duration", 0)
+        _jobs[job_id]["metadata"]["card_end_time"] = card_end_time
         _jobs[job_id]["metadata"]["timing_data"] = timing_data
         
         # Step 6: Create separate video parts in post-specific folder
