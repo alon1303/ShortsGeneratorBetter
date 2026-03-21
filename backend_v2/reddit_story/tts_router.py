@@ -180,11 +180,16 @@ async def generate_title_and_story_audio(
             final_cache_path = cache_dir / f"preview_{uuid.uuid4().hex[:8]}.mp3"
             shutil.copy2(final_audio_path, final_cache_path)
 
-            # Mock timing data for preview
+            # Timing data for video composition
             timing_data = {
-                "title_duration": title_duration, 
-                "buffer": buffer_seconds, 
-                "title_word_count": len(title_timestamps) if title_timestamps is not None else 0
+                "title_audio_duration": title_duration,
+                "buffer_seconds": buffer_seconds,
+                "title_word_count": len(title_timestamps) if title_timestamps is not None else 0,
+                "subtitle_start_time": title_duration + buffer_seconds,
+                "pop_in_duration": 0.6,
+                "pop_out_duration": 0.8,
+                "card_start_time": 0.0,
+                "card_end_time": title_duration + buffer_seconds
             }
             
             return final_cache_path, story_audio_chunks, title_duration, timing_data

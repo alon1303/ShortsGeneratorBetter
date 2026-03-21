@@ -15,6 +15,25 @@ class WordTimestamp:
     end: float    # End time in seconds
     confidence: float  # Confidence score (0.0-1.0)
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "word": self.word,
+            "start": self.start,
+            "end": self.end,
+            "confidence": self.confidence,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'WordTimestamp':
+        """Create WordTimestamp from dictionary."""
+        return cls(
+            word=data["word"],
+            start=data["start"],
+            end=data["end"],
+            confidence=data.get("confidence", 1.0),
+        )
+
 
 @dataclass
 class AudioChunk:

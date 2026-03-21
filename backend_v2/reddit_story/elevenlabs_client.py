@@ -86,34 +86,126 @@ class ElevenLabsClient:
             if cached_files:
                 cached_path = sorted(cached_files)[-1]
                 duration = await self._estimate_duration(cached_path)
-                return cached_path, duration, None
+                
+                # Try to load cached timestamps
+                word_timestamps = None
+                json_path = cached_path.with_suffix(".json")
+                if json_path.exists():
+                    try:
+                        with open(json_path, "r", encoding='utf-8') as f:
+                            data = json.load(f)
+                            word_timestamps = [WordTimestamp.from_dict(w) for w in data]
+                    except Exception as e:
+                        logger.warning(f"Failed to load cached timestamps: {e}")
+                
+                return cached_path, duration, word_timestamps
 
         try:
             logger.info(f"Generating ElevenLabs TTS for {len(text)} chars")
             
-            # THE FIX: Use text_to_speech.convert instead of generate
-            audio_generator = self.client.text_to_speech.convert(
+            # Use convert_with_timestamps to get character-level alignment
+            response = self.client.text_to_speech.convert_with_timestamps(
                 text=text,
                 voice_id=voice_id,
                 model_id=self.model,
                 output_format="mp3_44100_128"
             )
             
-            # Collect all bytes from the generator
-            audio_data = b"".join(list(audio_generator))
+            # Debug: log the attributes of response
+            logger.info(f"Response type: {type(response)}")
+            # In latest SDK, it might be 'audio' (base64 or bytes) or it might be a generator
+            # The error said 'AudioWithTimestampsResponse' object has no attribute 'audio'
+            
+            # The correct attribute is 'audio_base_64' (based on debug log)
+            import base64
+            if hasattr(response, 'audio_base_64') and response.audio_base_64:
+                audio_data = base64.b64decode(response.audio_base_64)
+            elif hasattr(response, 'audio') and response.audio:
+                if isinstance(response.audio, bytes):
+                    audio_data = response.audio
+                else:
+                    audio_data = b"".join(list(response.audio))
+            else:
+                raise AttributeError("Could not find audio data in ElevenLabs response")
+
+            # response.alignment contains characters, character_start_times_seconds, character_end_times_seconds
+            alignment = response.alignment
+            
+            word_timestamps = self._aggregate_characters_to_words(alignment)
             
             timestamp = int(time.time())
             file_path = self.voices_dir / f"{cache_key}_{timestamp}.mp3"
+            json_path = self.voices_dir / f"{cache_key}_{timestamp}.json"
             
             with open(file_path, "wb") as f:
                 f.write(audio_data)
+            
+            # Cache word timestamps
+            with open(json_path, "w", encoding='utf-8') as f:
+                json.dump([w.to_dict() for w in word_timestamps], f, indent=2)
                 
             duration = await self._estimate_duration(file_path)
-            return file_path, duration, None # Timestamps require a more complex streaming setup
+            return file_path, duration, word_timestamps
             
         except Exception as e:
             logger.error(f"ElevenLabs TTS failed: {str(e)}")
             raise
+
+    def _aggregate_characters_to_words(self, alignment: Any) -> List[WordTimestamp]:
+        """
+        Aggregates character-level alignment data into word-level timestamps.
+        
+        Args:
+            alignment: The alignment object from ElevenLabs containing:
+                      - characters: List[str]
+                      - character_start_times_seconds: List[float]
+                      - character_end_times_seconds: List[float]
+        """
+        if not alignment or not alignment.characters:
+            return []
+            
+        words = []
+        current_word_chars = []
+        current_word_start = None
+        
+        chars = alignment.characters
+        starts = alignment.character_start_times_seconds
+        ends = alignment.character_end_times_seconds
+        
+        for char, start, end in zip(chars, starts, ends):
+            # Check if this character is whitespace
+            if char.isspace():
+                if current_word_chars:
+                    # Finalize current word
+                    word_text = "".join(current_word_chars)
+                    words.append(WordTimestamp(
+                        word=word_text,
+                        start=current_word_start,
+                        end=current_word_end,
+                        confidence=1.0 # ElevenLabs doesn't provide confidence per character
+                    ))
+                    current_word_chars = []
+                    current_word_start = None
+                continue
+            
+            # If it's a non-space character
+            if not current_word_chars:
+                current_word_start = start
+            
+            current_word_chars.append(char)
+            current_word_end = end
+            
+        # Add the last word if it exists
+        if current_word_chars:
+            word_text = "".join(current_word_chars)
+            words.append(WordTimestamp(
+                word=word_text,
+                start=current_word_start,
+                end=current_word_end,
+                confidence=1.0
+            ))
+            
+        return words
 
     async def generate_audio_chunks(
         self,
@@ -123,12 +215,13 @@ class ElevenLabsClient:
     ) -> List[AudioChunk]:
         chunks = []
         for text in text_chunks:
-            path, duration, _ = await self.text_to_speech_with_timestamps(text, voice, **kwargs)
+            path, duration, word_timestamps = await self.text_to_speech_with_timestamps(text, voice, **kwargs)
             chunks.append(AudioChunk(
                 chunk_id=str(uuid.uuid4())[:8],
                 text=text,
                 audio_path=path,
                 duration_seconds=duration,
+                word_timestamps=word_timestamps,
                 voice_id=voice or self.voice,
                 file_size_bytes=path.stat().st_size if path else 0
             ))
