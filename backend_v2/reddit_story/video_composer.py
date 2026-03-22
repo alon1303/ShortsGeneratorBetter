@@ -54,7 +54,8 @@ class VideoComposer:
         title_offset: float = 0.0,
         title_word_count: int = 0,
         is_first_part: bool = False,
-        timing_data: Optional[Dict[str, Any]] = None
+        timing_data: Optional[Dict[str, Any]] = None,
+        custom_keywords: Optional[List[str]] = None
     ) -> bool:
         generator = SubtitleGenerator(
             video_width=1080,
@@ -82,7 +83,8 @@ class VideoComposer:
                     title_word_count=title_word_count,
                     audio_duration=audio_duration,
                     output_path=output_path,
-                    min_start_time=min_start_time
+                    min_start_time=min_start_time,
+                    custom_keywords=custom_keywords
                 )
                 return success
             else:
@@ -93,7 +95,8 @@ class VideoComposer:
                     word_timestamps=adjusted_word_timestamps,
                     audio_duration=audio_duration + title_offset,
                     output_path=output_path,
-                    min_start_time=0.0
+                    min_start_time=0.0,
+                    custom_keywords=custom_keywords
                 )
                 return success
         else:
@@ -116,152 +119,61 @@ class VideoComposer:
         hook_duration: Optional[float] = None
     ) -> bool:
         try:
-            self._validate_background_fps(background_path)
-            
-            audio_cmd = [
-                'ffprobe', '-v', 'quiet', '-show_entries', 'format=duration',
-                '-of', 'default=noprint_wrappers=1:nokey=1', str(audio_path)
-            ]
+            audio_cmd = ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', str(audio_path)]
             audio_result = subprocess.run(audio_cmd, capture_output=True, text=True)
             audio_duration = float(audio_result.stdout.strip()) if audio_result.stdout else 0
+            if audio_duration <= 0: return False
             
-            if audio_duration <= 0:
-                return False
+            temp_dir = Path(tempfile.mkdtemp())
+            shutil.copy2(audio_path, temp_dir / audio_path.name)
+            shutil.copy2(background_path, temp_dir / background_path.name)
             
-            temp_dir = tempfile.mkdtemp()
-            temp_path = Path(temp_dir)
-            
-            audio_temp = temp_path / audio_path.name
-            shutil.copy2(audio_path, audio_temp)
-            
-            background_temp = temp_path / background_path.name
-            shutil.copy2(background_path, background_temp)
-            
-            overlay_temp = None
+            overlay_name = None
             if overlay_image_path and overlay_image_path.exists():
-                overlay_temp = temp_path / overlay_image_path.name
-                shutil.copy2(overlay_image_path, overlay_temp)
-            
-            pop_sfx_temp = None
-            if pop_sfx_path and pop_sfx_path.exists():
-                pop_sfx_temp = temp_path / pop_sfx_path.name
-                shutil.copy2(pop_sfx_path, pop_sfx_temp)
-            
-            subtitle_temp = None
+                shutil.copy2(overlay_image_path, temp_dir / overlay_image_path.name)
+                overlay_name = overlay_image_path.name
+                
+            subtitle_name = None
             if subtitle_path and subtitle_path.exists():
-                subtitle_temp = temp_path / subtitle_path.name
-                shutil.copy2(subtitle_path, subtitle_temp)
-            
-            current_audio_path = audio_temp
-            
-            if pop_sfx_temp and pop_sfx_temp.exists():
-                mixed_audio_path = self.audio_mixer.mix_title_with_pop_sfx(
-                    main_audio_path=audio_temp,
-                    pop_sfx_path=pop_sfx_temp,
-                    pop_start_time=0.6,
-                    pop_volume_delta=-6.0,
-                    output_path=temp_path / "audio_mixed.mp3"
-                )
-                if mixed_audio_path and mixed_audio_path.exists():
-                    current_audio_path = mixed_audio_path
-            
-            if bg_music_path and bg_music_path.exists():
-                bgm_temp = temp_path / bg_music_path.name
-                shutil.copy2(bg_music_path, bgm_temp)
-                mixed_with_bgm_path = self.audio_mixer.add_background_music(
-                    main_audio_path=current_audio_path,
-                    bg_music_path=bgm_temp,
-                    output_path=temp_path / "audio_fully_mixed.mp3",
-                    bg_volume_delta=settings.BGM_VOLUME_DELTA,
-                )
-                if mixed_with_bgm_path and mixed_with_bgm_path.exists():
-                    current_audio_path = mixed_with_bgm_path
+                shutil.copy2(subtitle_path, temp_dir / subtitle_path.name)
+                subtitle_name = subtitle_path.name
 
-            cmd = ['ffmpeg', '-y']
-            cmd.extend(['-i', background_temp.name])
-            if overlay_temp and overlay_temp.exists():
-                cmd.extend(['-loop', '1', '-framerate', '30', '-i', overlay_temp.name])
-            cmd.extend(['-i', current_audio_path.name])
+            cur_audio = audio_path.name
+            if pop_sfx_path and pop_sfx_path.exists():
+                shutil.copy2(pop_sfx_path, temp_dir / pop_sfx_path.name)
+                mixed = self.audio_mixer.mix_title_with_pop_sfx(temp_dir / audio_path.name, temp_dir / pop_sfx_path.name, output_path=temp_dir / "mixed.mp3")
+                if mixed: cur_audio = "mixed.mp3"
+
+            cmd = ['ffmpeg', '-y', '-i', background_path.name]
+            if overlay_name: cmd.extend(['-loop', '1', '-framerate', '30', '-i', overlay_name])
+            cmd.extend(['-i', cur_audio])
             
-            filter_complex = None
-            if overlay_temp and overlay_temp.exists():
-                if timing_data and 'card_start_time' in timing_data and 'card_end_time' in timing_data:
-                    card_start = timing_data['card_start_time']
-                    card_end = timing_data['card_end_time']
-                    if ('title_audio_duration' in timing_data and 'buffer_seconds' in timing_data and
-                        'pop_in_duration' in timing_data):
-                        calculator = TitlePopupTimingCalculator(
-                            title_audio_duration=timing_data['title_audio_duration'],
-                            buffer_seconds=timing_data['buffer_seconds']
-                        )
-                        filter_complex = calculator.get_ffmpeg_filter_for_animation(overlay_temp)
-                    else:
-                        filter_complex = (
-                            f'[1:v]scale=900:-1[overlay_scaled];'
-                            f'[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:enable=\'between(t,{card_start},{card_end})\''
-                        )
+            filter_complex = ""
+            if overlay_name:
+                if timing_data and 'card_start_time' in timing_data:
+                    calc = TitlePopupTimingCalculator(timing_data['title_audio_duration'], timing_data['buffer_seconds'])
+                    filter_complex = calc.get_ffmpeg_filter_for_animation(Path(overlay_name))
                 else:
-                    card_start = 0.0
-                    card_end = hook_duration if hook_duration is not None and hook_duration > 0 else 4.0
-                    filter_complex = (
-                        f'[1:v]scale=900:-1[overlay_scaled];'
-                        f'[0:v][overlay_scaled]overlay=x=(W-w)/2:y=(H-h)/2:enable=\'between(t,{card_start},{card_end})\''
-                    )
+                    filter_complex = f'[1:v]scale=950:-1[ov];[0:v][ov]overlay=(W-w)/2:(H-h)/3:enable=\'between(t,0,4)\''
             
-            if subtitle_temp and subtitle_temp.exists():
-                if filter_complex:
-                    filter_complex += f',subtitles={subtitle_temp.name}[vout]'
-                else:
-                    filter_complex = f'[0:v]subtitles={subtitle_temp.name}[vout]'
-            elif filter_complex:
-                filter_complex += '[vout]'
+            if subtitle_name:
+                if filter_complex: filter_complex += f',subtitles={subtitle_name}[vout]'
+                else: filter_complex = f'subtitles={subtitle_name}[vout]'
             
             if filter_complex:
-                cmd.extend(['-filter_complex', filter_complex])
-                cmd.extend(['-map', '[vout]'])
+                cmd.extend(['-filter_complex', filter_complex, '-map', '[vout]', '-map', f'{"2" if overlay_name else "1"}:a'])
             else:
-                cmd.extend(['-map', '0:v'])
+                cmd.extend(['-map', '0:v', '-map', '1:a'])
+                
+            cmd.extend(['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-c:a', 'aac', '-t', str(audio_duration), output_path.name])
             
-            if overlay_temp and overlay_temp.exists():
-                cmd.extend(['-map', '2:a'])
-            else:
-                cmd.extend(['-map', '1:a'])
-            
-            cmd.extend([
-                '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
-                '-c:a', 'aac', '-b:a', '128k', '-t', str(audio_duration), '-movflags', '+faststart',
-                output_path.name
-            ])
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, cwd=temp_path)
-            if result.returncode != 0:
-                logger.error(f"FFmpeg failed: {result.stderr}")
-                shutil.rmtree(temp_dir, ignore_errors=True)
-                return False
-            
-            output_temp = temp_path / output_path.name
-            if output_temp.exists():
-                shutil.copy2(output_temp, output_path)
+            subprocess.run(cmd, capture_output=True, text=True, cwd=temp_dir)
+            if (temp_dir / output_path.name).exists():
+                shutil.copy2(temp_dir / output_path.name, output_path)
             shutil.rmtree(temp_dir, ignore_errors=True)
-            return output_path.exists() and output_path.stat().st_size > 0
-            
+            return output_path.exists()
         except Exception as e:
-            logger.error(f"Failed to combine audio with background: {e}")
-            if 'temp_dir' in locals():
-                shutil.rmtree(temp_dir, ignore_errors=True)
-            return False
-    
-    def apply_speed_multiplier(self, input_path: Path, output_path: Path, speed_multiplier: float) -> bool:
-        try:
-            pts_value = 1.0 / speed_multiplier
-            cmd = [
-                'ffmpeg', '-y', '-i', str(input_path),
-                '-filter_complex', f'[0:v]setpts={pts_value:.4f}*PTS[v];[0:a]atempo={speed_multiplier}[a]',
-                '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-preset', 'veryfast', '-c:a', 'aac', str(output_path)
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            return result.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0
-        except Exception:
+            logger.error(f"Combine failed: {e}")
             return False
 
     def create_video_part(
@@ -274,121 +186,23 @@ class VideoComposer:
         timing_data: Optional[Dict[str, Any]] = None,
         hook_duration: Optional[float] = None,
         bg_music_path: Optional[Path] = None,
-        dynamic_switching: Optional[bool] = None
+        dynamic_switching: Optional[bool] = None,
+        custom_keywords: Optional[List[str]] = None
     ) -> Optional[Path]:
-        if not audio_chunk.audio_path.exists():
-            return None
+        if not audio_chunk.audio_path.exists(): return None
+        if output_path is None: output_path = Path(tempfile.gettempdir()) / f"vp_{uuid.uuid4().hex}.mp4"
         
-        if output_path is None:
-            output_path = Path(tempfile.gettempdir()) / f"video_part_{uuid.uuid4()}.mp4"
-        
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            use_dynamic = dynamic_switching if dynamic_switching is not None else settings.BACKGROUND_DYNAMIC_SWITCHING
-            background_path = self.background_manager.create_sequential_background_clip(
-                duration=audio_chunk.duration_seconds,
-                theme=theme,
-                output_path=temp_path / "background.mp4",
-                dynamic_switching=use_dynamic
-            )
-            if not background_path:
-                return None
-            
-            subtitle_path = temp_path / "subtitles.ass"
-            title_offset = timing_data.get('subtitle_start_time', 0.0) if timing_data else 0.0
-            title_word_count = timing_data.get('title_word_count', 0) if timing_data else 0
-            
-            self.create_subtitles_for_text(
-                text=audio_chunk.text,
-                audio_duration=audio_chunk.duration_seconds,
-                output_path=subtitle_path,
-                word_timestamps=audio_chunk.word_timestamps,
-                audio_path=audio_chunk.audio_path,
-                title_offset=title_offset,
-                title_word_count=title_word_count,
-                is_first_part=audio_chunk.is_first_part,
-                timing_data=timing_data
-            )
-            
-            success = self.combine_audio_with_background(
-                audio_path=audio_chunk.audio_path,
-                background_path=background_path,
-                output_path=output_path,
-                subtitle_path=subtitle_path,
-                overlay_image_path=overlay_image_path,
-                pop_sfx_path=pop_sfx_path,
-                timing_data=timing_data,
-                hook_duration=hook_duration,
-                bg_music_path=bg_music_path
-            )
-            if not success:
+        with tempfile.TemporaryDirectory() as td:
+            tp = Path(td)
+            bg = self.background_manager.create_sequential_background_clip(audio_chunk.duration_seconds, theme, tp / "bg.mp4")
+            if not bg: return None
+            sub_path = tp / "subs.ass"
+            self.create_subtitles_for_text(audio_chunk.text, audio_chunk.duration_seconds, sub_path, audio_chunk.word_timestamps, audio_chunk.audio_path, timing_data=timing_data, custom_keywords=custom_keywords, title_word_count=timing_data.get('title_word_count', 0) if timing_data else 0)
+            if not self.combine_audio_with_background(audio_chunk.audio_path, bg, output_path, sub_path, overlay_image_path, pop_sfx_path=pop_sfx_path, bg_music_path=bg_music_path, timing_data=timing_data):
                 return None
         
-        speed = getattr(settings, 'FINAL_VIDEO_SPEED', 1.4)
-        if speed != 1.0:
-            final_path = output_path.parent / f"{output_path.stem}_{speed}x{output_path.suffix}"
-            if self.apply_speed_multiplier(output_path, final_path, speed):
-                return final_path
         return output_path
-    
-    def extract_thumbnail(self, video_path: Path, output_path: Path, timestamp: float = 1.0) -> bool:
-        """
-        Extracts a single frame from the video at a specific timestamp to use as a thumbnail.
-        
-        Args:
-            video_path: Path to the source video file
-            output_path: Path where the thumbnail image will be saved
-            timestamp: Time in seconds from the start of the video to extract the frame
-            
-        Returns:
-            True if extraction was successful, False otherwise
-        """
-        try:
-            logger.info(f"Extracting thumbnail from {video_path} at {timestamp}s")
-            
-            # command: ffmpeg -ss [timestamp] -i [video] -vframes 1 -q:v 2 [output]
-            # -q:v 2 sets high quality for jpeg
-            cmd = [
-                'ffmpeg', '-y',
-                '-ss', str(timestamp),
-                '-i', str(video_path),
-                '-vframes', '1',
-                '-q:v', '2',
-                str(output_path)
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            
-            if result.returncode != 0:
-                logger.error(f"Failed to extract thumbnail: {result.stderr}")
-                return False
-                
-            return output_path.exists() and output_path.stat().st_size > 0
-            
-        except Exception as e:
-            logger.error(f"Error during thumbnail extraction: {e}")
-            return False
 
-    def concatenate_videos(self, video_paths: List[Path], output_path: Path) -> bool:
-        try:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-                for vp in video_paths:
-                    if vp.exists():
-                        f.write(f"file '{str(vp).replace('\\', '\\\\')}'\n")
-                filelist = Path(f.name)
-            try:
-                cmd = [
-                    'ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', str(filelist),
-                    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
-                    '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', str(output_path)
-                ]
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                return result.returncode == 0 and output_path.exists()
-            finally:
-                filelist.unlink()
-        except Exception:
-            return False
-    
     def create_complete_shorts_video(
         self,
         audio_chunks: List[AudioChunk],
@@ -397,28 +211,23 @@ class VideoComposer:
         overlay_image_path: Optional[Path] = None,
         pop_sfx_path: Optional[Path] = None,
         bg_music_path: Optional[Path] = None,
-        timing_data: Optional[Dict[str, Any]] = None
+        timing_data: Optional[Dict[str, Any]] = None,
+        custom_keywords: Optional[List[str]] = None
     ) -> Path:
-        if output_path is None:
-            output_path = settings.OUTPUT_DIR / f"shorts_{uuid.uuid4()}.mp4"
-        
-        video_parts = []
+        if output_path is None: output_path = settings.OUTPUT_DIR / f"shorts_{uuid.uuid4().hex}.mp4"
+        vps = []
         for i, chunk in enumerate(audio_chunks, 1):
-            part = self.create_video_part(
-                audio_chunk=chunk, theme=theme,
-                overlay_image_path=overlay_image_path if i == 1 else None,
-                pop_sfx_path=pop_sfx_path if i == 1 else None,
-                bg_music_path=bg_music_path,
-                timing_data=timing_data if i == 1 else None
-            )
-            if part:
-                video_parts.append(part)
+            vp = self.create_video_part(chunk, theme, overlay_image_path=overlay_image_path if i==1 else None, pop_sfx_path=pop_sfx_path if i==1 else None, bg_music_path=bg_music_path, timing_data=timing_data if i==1 else None, custom_keywords=custom_keywords)
+            if vp: vps.append(vp)
         
-        if len(video_parts) == 1:
-            shutil.copy2(video_parts[0], output_path)
+        if len(vps) == 1: shutil.copy2(vps[0], output_path)
         else:
-            self.concatenate_videos(video_parts, output_path)
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+                for p in vps: f.write(f"file '{str(p).replace('\\','/')}'\n")
+                fl = Path(f.name)
+            subprocess.run(['ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', str(fl), '-c', 'copy', str(output_path)])
+            fl.unlink()
         return output_path
 
-def create_shorts_video(audio_chunks, theme=None, output_path=None, overlay_image_path=None, pop_sfx_path=None, bg_music_path=None, timing_data=None):
-    return VideoComposer().create_complete_shorts_video(audio_chunks, theme, output_path, overlay_image_path, pop_sfx_path, bg_music_path, timing_data=timing_data)
+def create_shorts_video(audio_chunks, theme=None, output_path=None, overlay_image_path=None, pop_sfx_path=None, bg_music_path=None, timing_data=None, custom_keywords=None):
+    return VideoComposer().create_complete_shorts_video(audio_chunks, theme, output_path, overlay_image_path, pop_sfx_path, bg_music_path, timing_data, custom_keywords)

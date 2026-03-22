@@ -8,9 +8,11 @@ import logging
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
 from dataclasses import dataclass
+import re
 import pysubs2
 
 from .models import WordTimestamp
+from .image_generator_new import RedditImageGenerator
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -171,14 +173,21 @@ class SubtitleGenerator:
         styles["Default"] = default_style
         return styles
     
-    def _generate_phrase_events_with_pysubs2(self, phrase: Phrase, min_start_time: float = 0.0) -> List[pysubs2.SSAEvent]:
+    def _generate_phrase_events_with_pysubs2(self, phrase: Phrase, min_start_time: float = 0.0, custom_keywords: Optional[List[str]] = None) -> List[pysubs2.SSAEvent]:
+        """
+        Generate ASS events for a phrase, with current-word highlighting.
+        NOTE: Red keyword highlighting is currently disabled for full transcription 
+        to keep the look clean, but custom_keywords is kept for future use.
+        """
         events = []
         min_start_ms = int(min_start_time * 1000)
+        
+        COLOR_YELLOW = "\\c&H00FFFF&"
+        COLOR_WHITE = "\\c&HFFFFFF&"
+        
         for i, current_word in enumerate(phrase.words):
-            # Enforce min_start_time floor
             word_start_ms = int(current_word.start * 1000)
             word_end_ms = int(current_word.end * 1000)
-            
             start_ms = max(min_start_ms, word_start_ms)
             
             if i + 1 < len(phrase.words):
@@ -186,54 +195,46 @@ class SubtitleGenerator:
             else:
                 end_ms = max(min_start_ms, word_end_ms)
             
-            # Ensure start < end
-            if start_ms >= end_ms:
-                end_ms = start_ms + 100
+            if start_ms >= end_ms: end_ms = start_ms + 100
             
             text_parts = []
             current_color = None
-            for j, word in enumerate(phrase.words):
-                needed_color = "\\c&H00FFFF&" if j == i else "\\c&HFFFFFF&"
+            
+            for j, word_ts in enumerate(phrase.words):
+                word_text = word_ts.word.upper()
+                # Active word is yellow, all others are white
+                needed_color = COLOR_YELLOW if j == i else COLOR_WHITE
+                
                 if needed_color != current_color:
                     text_parts.append("{" + needed_color + "}")
                     current_color = needed_color
-                text_parts.append(word.word.upper())
-                if j < len(phrase.words) - 1:
-                    text_parts.append(" ")
+                
+                text_parts.append(word_text)
+                if j < len(phrase.words) - 1: text_parts.append(" ")
             
-            event = pysubs2.SSAEvent(
-                start=start_ms, end=end_ms,
-                style="Default", text="".join(text_parts)
-            )
+            event = pysubs2.SSAEvent(start=start_ms, end=end_ms, style="Default", text="".join(text_parts))
             events.append(event)
         return events
-    
-    def _create_pysubs2_file(self, phrases: List[Phrase], min_start_time: float = 0.0) -> pysubs2.SSAFile:
+
+    def _create_pysubs2_file(self, phrases: List[Phrase], min_start_time: float = 0.0, custom_keywords: Optional[List[str]] = None) -> pysubs2.SSAFile:
         subs = pysubs2.SSAFile()
-        subs.info.update({
-            "PlayResX": str(self.video_width),
-            "PlayResY": str(self.video_height),
-            "WrapStyle": "0",
-            "ScaledBorderAndShadow": "yes",
-            "ScriptType": "v4.00+",
-            "YCbCr Matrix": "TV.709"
-        })
+        subs.info.update({"PlayResX": str(self.video_width), "PlayResY": str(self.video_height), "WrapStyle": "0", "ScaledBorderAndShadow": "yes", "ScriptType": "v4.00+", "YCbCr Matrix": "TV.709"})
         styles = self._create_pysubs2_styles()
-        for name, obj in styles.items():
-            subs.styles[name] = obj
+        for name, obj in styles.items(): subs.styles[name] = obj
         for phrase in phrases:
             is_first = (phrase == phrases[0])
             m_start = min_start_time if is_first else 0.0
-            for event in self._generate_phrase_events_with_pysubs2(phrase, min_start_time=m_start):
+            for event in self._generate_phrase_events_with_pysubs2(phrase, min_start_time=m_start, custom_keywords=custom_keywords):
                 subs.append(event)
         return subs
-    
+
     def generate_ass_with_pysubs2(
         self,
         word_timestamps: List[WordTimestamp],
         audio_duration: float,
         output_path: Path,
-        min_start_time: float = 0.0
+        min_start_time: float = 0.0,
+        custom_keywords: Optional[List[str]] = None
     ) -> bool:
         try:
             phrases = self.chunk_words_into_phrases(word_timestamps, audio_duration)
@@ -241,7 +242,7 @@ class SubtitleGenerator:
                 phrases = self._adjust_phrase_timing(phrases, audio_duration, min_start_time)
             if not phrases:
                 return False
-            subs = self._create_pysubs2_file(phrases, min_start_time=min_start_time)
+            subs = self._create_pysubs2_file(phrases, min_start_time=min_start_time, custom_keywords=custom_keywords)
             subs.save(str(output_path))
             return True
         except Exception as e:
@@ -274,7 +275,8 @@ class SubtitleGenerator:
         title_word_count: int,
         audio_duration: float,
         output_path: Path,
-        min_start_time: float = 0.0
+        min_start_time: float = 0.0,
+        custom_keywords: Optional[List[str]] = None
     ) -> Tuple[bool, float]:
         try:
             story_timestamps, title_duration = self.filter_and_adjust_timestamps(
@@ -286,7 +288,7 @@ class SubtitleGenerator:
                     story_timestamps[0].end = story_timestamps[0].start + 0.1
             
             success = self.generate_ass_with_pysubs2(
-                story_timestamps, audio_duration, output_path, min_start_time=min_start_time
+                story_timestamps, audio_duration, output_path, min_start_time=min_start_time, custom_keywords=custom_keywords
             )
             return success, title_duration
         except Exception as e:

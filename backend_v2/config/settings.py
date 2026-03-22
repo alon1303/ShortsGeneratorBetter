@@ -58,18 +58,21 @@ class Settings(BaseSettings):
     
     # ElevenLabs API Settings (for Phase 2)
     ELEVENLABS_API_KEY: Optional[str] = None
-    ELEVENLABS_VOICE_RACHEL: str = "21m00Tcm4TlvDq8ikWAM"  # Professional female
-    ELEVENLABS_VOICE_ADAM: str = "pNInz6obpgDQGcFmaJgB"    # Deep male
-    ELEVENLABS_VOICE_ELLI: str = "MF3mGyEYCl7XYWbV9V6O"    # Young female
-    ELEVENLABS_VOICE_JOSH: str = "TxGEqnHWrfWFTfGW9XjX"    # Casual male
+    ELEVENLABS_VOICE_RACHEL: str = "21m00Tcm4TlvDq8ikWAM"
+    ELEVENLABS_VOICE_ADAM: str = "pNInz6obpgDQGcFmaJgB"
+    ELEVENLABS_VOICE_ELLI: str = "MF3mGyEYCl7XYWbV9V6O"
+    ELEVENLABS_VOICE_JOSH: str = "TxGEqnHWrfWFTfGW9XjX"
+    
+    # Gemini settings for keyword extraction (optional)
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-flash-latest"
     
     # Edge TTS Voices (for TTS_ENGINE = "edge")
-    EDGE_TTS_VOICE_FEMALE: str = "en-US-JennyNeural"        # Female voice
-    EDGE_TTS_VOICE_MALE: str = "en-US-ChristopherNeural"   # Male voice
+    EDGE_TTS_VOICE_FEMALE: str = "en-US-JennyNeural"
+    EDGE_TTS_VOICE_MALE: str = "en-US-ChristopherNeural"
     
-    DEFAULT_VOICE_ID: str = EDGE_TTS_VOICE_MALE  # Default to male Edge TTS voice
+    DEFAULT_VOICE_ID: str = EDGE_TTS_VOICE_MALE
     
-    # Edge TTS alias mapping for get_voice_id method
     EDGE_TTS_ALIASES: Dict[str, str] = Field(
         default_factory=lambda: {
             "female": "en-US-JennyNeural",
@@ -77,307 +80,91 @@ class Settings(BaseSettings):
             "aria": "en-US-AriaNeural",
             "christopher": "en-US-ChristopherNeural",
             "default": "en-US-JennyNeural",
-        },
-        description="Mapping of voice aliases to Edge TTS voice IDs"
+        }
     )
     
-    # TTS Engine Configuration
-    TTS_ENGINE: str = "edge"  # "edge" or "elevenlabs"
+    TTS_ENGINE: str = "edge"
     
     # Background video settings
     DEFAULT_BACKGROUND_THEME: str = "minecraft"
     BACKGROUND_THEMES: List[str] = ["abstract", "food", "gta", "lofi", "minecraft", "nature", "oddly satisfying", "subway surfer"]
-    MIN_BACKGROUND_DURATION: int = 60  # seconds
-    MAX_BACKGROUND_DURATION: int = 300  # seconds
+    MIN_BACKGROUND_DURATION: int = 60
+    MAX_BACKGROUND_DURATION: int = 300
     
     # Dynamic background clip settings
-    BACKGROUND_CLIP_DURATION_MIN: float = 5.0  # Minimum clip duration in seconds
-    BACKGROUND_CLIP_DURATION_MAX: float = 10.0  # Maximum clip duration in seconds
-    BACKGROUND_DYNAMIC_SWITCHING: bool = True  # Enable random theme switching per clip
-    BGM_VOLUME_DELTA: float = -10.0  # dB adjustment for background music
+    BACKGROUND_CLIP_DURATION_MIN: float = 5.0
+    BACKGROUND_CLIP_DURATION_MAX: float = 10.0
+    BACKGROUND_DYNAMIC_SWITCHING: bool = True
+    BGM_VOLUME_DELTA: float = -10.0
     
     # Video processing
     TARGET_WIDTH: int = 1080
     TARGET_HEIGHT: int = 1920
     TARGET_FPS: int = 30
-    VIDEO_CRF: int = 23  # Quality (0-51, lower is better)
+    VIDEO_CRF: int = 23
     VIDEO_PRESET: str = "veryfast"
     AUDIO_BITRATE: str = "128k"
-    FINAL_VIDEO_SPEED: float = 1.2  # Dynamic video speed multiplier
+    FINAL_VIDEO_SPEED: float = 1.2
     
     # Story segmentation
-    MIN_PART_DURATION: int = 30  # seconds
-    MAX_PART_DURATION: int = 60  # seconds
+    MIN_PART_DURATION: int = 30
+    MAX_PART_DURATION: int = 60
     MAX_PARTS: int = 5
     
     # Caching
-    CACHE_TTL: int = 3600  # 1 hour in seconds
+    CACHE_TTL: int = 3600
     ENABLE_CACHE: bool = True
     
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
-        extra = "ignore"  # Allow extra environment variables (e.g., Google OAuth)
+        extra = "ignore"
 
     @validator("TTS_ENGINE")
     def validate_tts_engine(cls, v):
-        """Validate TTS engine selection."""
         if v.lower() not in ["edge", "elevenlabs"]:
             raise ValueError(f"Invalid TTS engine: {v}. Must be 'edge' or 'elevenlabs'")
         return v.lower()
 
     @validator("ASSETS_DIR", "BACKGROUNDS_DIR", pre=True)
     def resolve_relative_to_base_dir(cls, v: Any, values: Dict[str, Any]) -> Any:
-        """Resolve ASSETS_DIR and BACKGROUNDS_DIR relative to BASE_DIR if they are relative paths."""
-        if isinstance(v, str):
-            v = Path(v)
-        
-        # If path is not absolute, resolve it relative to BASE_DIR
+        if isinstance(v, str): v = Path(v)
         if isinstance(v, Path) and not v.is_absolute():
-            # Get BASE_DIR from values (already validated)
             if "BASE_DIR" in values and values["BASE_DIR"]:
-                base_dir = values["BASE_DIR"]
-                # Resolve relative to BASE_DIR
-                v = base_dir / v
-            else:
-                # Fallback: make absolute relative to current directory
-                v = v.absolute()
-        
+                v = values["BASE_DIR"] / v
+            else: v = v.absolute()
         return v
     
     @validator("UPLOAD_DIR", "OUTPUT_DIR", "DATA_DIR", "CACHE_DIR", "ASSETS_DIR", "BACKGROUNDS_DIR", pre=True)
     def validate_and_create_dirs(cls, v: Path) -> Path:
-        """Validate and create directories if they don't exist."""
-        if isinstance(v, str):
-            v = Path(v)
-        # Ensure absolute path (should already be absolute from resolve_relative_to_base_dir)
-        if not v.is_absolute():
-            v = v.absolute()
+        if isinstance(v, str): v = Path(v)
+        if not v.is_absolute(): v = v.absolute()
         v.mkdir(parents=True, exist_ok=True)
         return v
     
-    @validator("REDDIT_USER_AGENT")
-    def validate_reddit_user_agent(cls, v, values):
-        """Validate Reddit user agent is set."""
-        if not v or v == "ShortsGenerator/1.0 by YourUsername":
-            print(f"Warning: Using default Reddit user agent. Consider setting a custom REDDIT_USER_AGENT.")
-        return v
+    def is_reddit_configured(self) -> bool: return True
+    def is_elevenlabs_configured(self) -> bool: return bool(self.ELEVENLABS_API_KEY)
     
-    @validator("ALLOWED_EXTENSIONS", pre=True)
-    def parse_allowed_extensions(cls, v):
-        """Parse ALLOWED_EXTENSIONS from comma-separated string or list."""
-        if isinstance(v, str):
-            # Split by comma and strip whitespace
-            extensions = [ext.strip() for ext in v.split(",") if ext.strip()]
-            return extensions
-        return v
-    
-    @validator("ELEVENLABS_API_KEY")
-    def validate_elevenlabs_key(cls, v, values):
-        """Validate ElevenLabs API key is set if TTS features are enabled."""
-        # Only warn if not set, don't fail since TTS might not be needed
-        if not v:
-            print(f"Warning: ElevenLabs API key not set. TTS features will be disabled.")
-        return v
-    
-    def get_allowed_extensions_set(self) -> set:
-        """Get allowed file extensions as a set."""
-        return set(self.ALLOWED_EXTENSIONS)
-    
-    def get_max_file_size_bytes(self) -> int:
-        """Get maximum file size in bytes."""
-        return self.MAX_FILE_SIZE_MB * 1024 * 1024
-    
-    def get_backgrounds_by_theme(self, theme: str) -> List[Path]:
-        """Get list of background videos for a specific theme."""
-        theme_dir = self.BACKGROUNDS_DIR / theme
-        if not theme_dir.exists():
-            return []
-        
-        video_files = []
-        for ext in self.ALLOWED_EXTENSIONS:
-            video_files.extend(list(theme_dir.glob(f"*{ext}")))
-        
-        return video_files
-    
-    def get_random_background(self, theme: Optional[str] = None) -> Optional[Path]:
-        """Get a random background video path for the specified theme."""
-        import random
-        
-        theme = theme or self.DEFAULT_BACKGROUND_THEME
-        backgrounds = self.get_backgrounds_by_theme(theme)
-        
-        if not backgrounds:
-            # Fallback to any available background
-            all_backgrounds = []
-            for t in self.BACKGROUND_THEMES:
-                all_backgrounds.extend(self.get_backgrounds_by_theme(t))
-            
-            if not all_backgrounds:
-                return None
-            
-            return random.choice(all_backgrounds)
-        
-        return random.choice(backgrounds)
-    
-    def is_reddit_configured(self) -> bool:
-        """Check if Reddit is configured (always true for public endpoints)."""
-        return True  # Always true since we use public JSON endpoints
-    
-    def is_elevenlabs_configured(self) -> bool:
-        """Check if ElevenLabs API is properly configured."""
-        return bool(self.ELEVENLABS_API_KEY)
+    @property
+    def use_gemini_keywords(self) -> bool:
+        return bool(self.GEMINI_API_KEY)
     
     def get_voice_id(self, voice_name: Optional[str] = None, engine: Optional[str] = None) -> str:
-        """
-        Get voice ID by name or return default.
-        Returns appropriate voice ID based on TTS_ENGINE setting or provided engine.
-        """
         engine = engine or self.TTS_ENGINE.lower()
-
-        # Determine which voice map to use based on TTS engine
         if engine == "edge":
             if voice_name:
                 voice_lower = voice_name.lower()
-                # Check if it's a known alias
-                if voice_lower in self.EDGE_TTS_ALIASES:
-                    return self.EDGE_TTS_ALIASES[voice_lower]
-                # Check if it's already a valid Edge TTS voice ID (contains "Neural")
-                elif "neural" in voice_lower or "en-" in voice_lower:
-                    return voice_name  # Assume it's already a valid Edge TTS voice ID
-            # Return default Edge TTS voice
+                if voice_lower in self.EDGE_TTS_ALIASES: return self.EDGE_TTS_ALIASES[voice_lower]
+                elif "neural" in voice_lower or "en-" in voice_lower: return voice_name
             return self.DEFAULT_VOICE_ID
-            
         elif engine == "elevenlabs":
-            # ElevenLabs voice mapping
-            elevenlabs_voice_map = {
-                "rachel": self.ELEVENLABS_VOICE_RACHEL,
-                "adam": self.ELEVENLABS_VOICE_ADAM,
-                "elli": self.ELEVENLABS_VOICE_ELLI,
-                "josh": self.ELEVENLABS_VOICE_JOSH,
-            }
-            
+            evm = {"rachel": self.ELEVENLABS_VOICE_RACHEL, "adam": self.ELEVENLABS_VOICE_ADAM, "elli": self.ELEVENLABS_VOICE_ELLI, "josh": self.ELEVENLABS_VOICE_JOSH}
             if voice_name:
                 voice_lower = voice_name.lower()
-                if voice_lower in elevenlabs_voice_map:
-                    return elevenlabs_voice_map[voice_lower]
-                # If it's a 20-character alphanumeric string, it's likely a voice ID
-                if len(voice_name) == 20 and voice_name.isalnum():
-                    return voice_name
-
-            # Return default ElevenLabs voice
+                if voice_lower in evm: return evm[voice_lower]
+                if len(voice_name) == 20 and voice_name.isalnum(): return voice_name
             return self.ELEVENLABS_VOICE_ADAM
-        
-        # Default case (shouldn't happen)
         return self.DEFAULT_VOICE_ID
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert settings to dictionary for API responses."""
-        return {
-            "app": {
-                "name": self.APP_NAME,
-                "version": self.APP_VERSION,
-                "debug": self.DEBUG,
-            },
-            "server": {
-                "host": self.HOST,
-                "port": self.PORT,
-                "workers": self.WORKERS,
-            },
-            "paths": {
-                "base_dir": str(self.BASE_DIR),
-                "upload_dir": str(self.UPLOAD_DIR),
-                "output_dir": str(self.OUTPUT_DIR),
-                "cache_dir": str(self.CACHE_DIR),
-                "assets_dir": str(self.ASSETS_DIR),
-                "backgrounds_dir": str(self.BACKGROUNDS_DIR),
-            },
-            "reddit": {
-                "configured": self.is_reddit_configured(),
-                "default_subreddit": self.DEFAULT_SUBREDDIT,
-                "default_time_filter": self.DEFAULT_TIME_FILTER,
-            },
-            "elevenlabs": {
-                "configured": self.is_elevenlabs_configured(),
-                "default_voice": self.DEFAULT_VOICE_ID,
-            },
-            "video": {
-                "target_resolution": f"{self.TARGET_WIDTH}x{self.TARGET_HEIGHT}",
-                "target_fps": self.TARGET_FPS,
-                "quality_crf": self.VIDEO_CRF,
-                "preset": self.VIDEO_PRESET,
-            },
-            "story": {
-                "min_part_duration": self.MIN_PART_DURATION,
-                "max_part_duration": self.MAX_PART_DURATION,
-                "max_parts": self.MAX_PARTS,
-                "words_per_minute": self.WORDS_PER_MINUTE,
-            },
-        }
 
-
-# Global settings instance
 settings = Settings()
-
-# Create necessary directories
-settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-settings.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
-settings.CACHE_DIR.mkdir(parents=True, exist_ok=True)
-settings.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
-settings.BACKGROUNDS_DIR.mkdir(parents=True, exist_ok=True)
-
-# Create theme directories
-for theme in settings.BACKGROUND_THEMES:
-    theme_dir = settings.BACKGROUNDS_DIR / theme
-    theme_dir.mkdir(parents=True, exist_ok=True)
-
-
-def print_settings_summary():
-    """Print a summary of the current settings."""
-    print("=" * 60)
-    print(f"{settings.APP_NAME} v{settings.APP_VERSION}")
-    print("=" * 60)
-    
-    print("\n📁 Directories:")
-    print(f"  Uploads: {settings.UPLOAD_DIR}")
-    print(f"  Outputs: {settings.OUTPUT_DIR}")
-    print(f"  Cache: {settings.CACHE_DIR}")
-    print(f"  Assets: {settings.ASSETS_DIR}")
-    print(f"  Backgrounds: {settings.BACKGROUNDS_DIR}")
-    
-    print("\n🔧 Reddit Configuration:")
-    print(f"  Configured: {settings.is_reddit_configured()}")
-    if settings.is_reddit_configured():
-        print(f"  Default Subreddit: r/{settings.DEFAULT_SUBREDDIT}")
-        print(f"  Time Filter: {settings.DEFAULT_TIME_FILTER}")
-    
-    print("\n🎙️ ElevenLabs Configuration:")
-    print(f"  Configured: {settings.is_elevenlabs_configured()}")
-    if settings.is_elevenlabs_configured():
-        print(f"  Default Voice: {settings.DEFAULT_VOICE_ID}")
-    
-    print("\n🎬 Video Settings:")
-    print(f"  Resolution: {settings.TARGET_WIDTH}x{settings.TARGET_HEIGHT}")
-    print(f"  FPS: {settings.TARGET_FPS}")
-    print(f"  Quality (CRF): {settings.VIDEO_CRF}")
-    print(f"  Preset: {settings.VIDEO_PRESET}")
-    
-    print("\n📖 Story Settings:")
-    print(f"  Part Duration: {settings.MIN_PART_DURATION}-{settings.MAX_PART_DURATION}s")
-    print(f"  Max Parts: {settings.MAX_PARTS}")
-    print(f"  Narration Speed: {settings.WORDS_PER_MINUTE} wpm")
-    
-    print("\n🎨 Background Themes:")
-    for theme in settings.BACKGROUND_THEMES:
-        theme_dir = settings.BACKGROUNDS_DIR / theme
-        bg_count = len(list(theme_dir.glob("*")))
-        print(f"  {theme.capitalize()}: {bg_count} files")
-    
-    print("=" * 60)
-
-
-if __name__ == "__main__":
-    # Print settings summary when run directly
-    print_settings_summary()

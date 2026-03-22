@@ -40,6 +40,7 @@ The ShortsGenerator video generation pipeline is **operational** with core funct
 
 5. **Subtitle Generation** (`subtitle_generator.py`)
    - Word-level subtitle synchronization (Hormozi style)
+   - **Dynamic Keyword Highlighting**: Shared with Intro Card (Red highlights for dramatic words)
    - ASS format with styling and animations
    - Title filtering for separate title/subtitle timing
    - Audio offset detection and adjustment
@@ -53,7 +54,21 @@ The ShortsGenerator video generation pipeline is **operational** with core funct
 
 7. **Title Card Generation** (`image_generator_new.py`)
    - Playwright-based HTML-to-image generation
-   - Reddit post styling with dark/light themes
+    - **AI-Powered Keyword Highlighting**: Selective red highlights for Intro Title Card using Gemini Flash semantic extraction. Full transcription remains clean.
+    - Reddit post styling with dark/light themes
+>>>>>>>------- SEARCH
+### Phase 2: Production Ready (Target)
+- [x] AI-Powered Keyword Extraction (Gemini Flash)
+- [ ] Full end-to-end testing completed
+### Phase 2: Production Ready (Target)
+- [x] AI-Powered Keyword Extraction (Gemini Flash) for high-impact Intro highlights
+- [ ] Full end-to-end testing completed
+>>>>>>>------- SEARCH
+### Phase 2: Production Ready (Target)
+- [ ] Full end-to-end testing completed
+### Phase 2: Production Ready (Target)
+- [x] AI-Powered Keyword Extraction (Gemini Flash)
+- [ ] Full end-to-end testing completed
    - Transparent background support
    - Title popup timing calculation
 

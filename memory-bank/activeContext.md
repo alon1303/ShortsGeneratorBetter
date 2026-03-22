@@ -14,7 +14,7 @@ The ShortsGenerator video generation pipeline is operational with core functiona
 1. **FFmpeg Consistency**: Forcing `setsar=1` in `BackgroundManager` ensures all clips have the same metadata for reliable concatenation.
 2. **Sequential Backgrounds**: Significantly improves viewer engagement
 2. **Dynamic Background Management**: Created `BackgroundManager` with sequential background clipping and theme-based selection
-3. **Subtitle Generation**: Implemented word-level subtitle synchronization with Hormozi-style highlighting
+3. **Subtitle Generation**: Implemented word-level subtitle synchronization with Hormozi-style highlighting, including red highlights for dramatic keywords (AITA, MOM, etc.)
 4. **API Integration**: FastAPI endpoints for Reddit story processing with background job tracking
 5. **Title Card Generation**: Playwright-based HTML-to-image title card generation with Reddit post styling
 6. **Post-Specific Organization**: Each story creates organized output folders with title cards and separate video parts
@@ -52,6 +52,14 @@ The ShortsGenerator video generation pipeline is operational with core functiona
 
 ### Recent Learnings
 - **Subtitle Suppression**: Successfully implemented a robust Title Card vs Subtitle synchronization system. By enforcing a strict `min_start_time` at both the phrase and individual word levels within `SubtitleGenerator`, story subtitles are guaranteed to stay silent until the Title Card duration (narration + buffer) has fully elapsed, preventing visual overlap.
+- **AI-Powered Keyword Highlighting**: Implemented a sophisticated two-tier highlighting system.
+    1. **AI Extraction**: Uses Google Gemini Flash (`gemini-flash-latest`) to semantically analyze the story title and extract 2-5 high-impact keywords. Verified successful connection and extraction with user's API key.
+    2. **Context-Aware Fallback**: If AI is disabled or fails, a robust heuristic logic takes over. It uses regex-based tokenization, scores words by length and "power" status, filters out common stopwords (the, and, etc.), and limits highlight density (max 25%) to ensure the most dramatic words "pop".
+    3. **Intro-Only Highlighting**: As per the latest requirements, red keyword highlighting is applied ONLY to the Intro Title Card. The full transcription (subtitles) remains clean with only the **Yellow** active-word highlighting.
+>>>>>>>------- SEARCH
+   - **Dynamic Keyword Highlighting**: Shared with Intro Card (Red highlights for dramatic words)
+   - **Dynamic Keyword Highlighting**: Shared with Intro Card (Red highlights enabled for Intro, disabled for full transcription to maintain clean look)
+    4. **Requirement**: To enable AI extraction, a `GEMINI_API_KEY` must be provided in the environment variables.
 
 ### Next Priority Tasks
 1. **Audio Mixing Enhancement**: Better integration of pop SFX and audio effects
