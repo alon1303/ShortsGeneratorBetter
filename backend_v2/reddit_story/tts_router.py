@@ -65,7 +65,6 @@ class TTSRouter:
                     logger.warning(f"Overriding Edge TTS voice '{voice_id}' with ElevenLabs default for ElevenLabs engine")
                     voice_id = settings.get_voice_id("adam", engine="elevenlabs")
                 
-                # Fixed: Use 'voice' instead of 'voice_id' to match ElevenLabsClient.__init__
                 self._client = ElevenLabsClient(
                     voice=voice_id,
                     cache_dir=self.config.cache_dir
@@ -79,12 +78,23 @@ class TTSRouter:
         self,
         text: str,
         voice: Optional[str] = None,
+        gender: Optional[str] = None,
         **kwargs,
     ) -> Tuple[Optional[Path], float, Optional[List[WordTimestamp]]]:
         client = await self._get_client()
-        voice = voice or self.config.voice_id
         
-        logger.info(f"TTSRouter: engine={self.config.engine}, requested_voice={voice}")
+        # Determine voice based on gender if provided and using ElevenLabs
+        if self.config.engine == "elevenlabs" and gender:
+            if gender.upper() == "F":
+                voice = "yj30vwTGJxSHezdAGsv9"
+                logger.info(f"Using ElevenLabs female voice: {voice}")
+            else:
+                voice = voice or self.config.voice_id
+                logger.info(f"Using ElevenLabs male/default voice: {voice}")
+        else:
+            voice = voice or self.config.voice_id
+            
+        logger.info(f"TTSRouter: engine={self.config.engine}, requested_voice={voice}, gender={gender}")
         
         # Sanitize voice for ElevenLabs engine to prevent 400 errors
         if self.config.engine == "elevenlabs" and voice:
@@ -113,11 +123,20 @@ class TTSRouter:
         self,
         text_chunks: List[str],
         voice: Optional[str] = None,
+        gender: Optional[str] = None,
         with_timestamps: bool = True,
         **kwargs,
     ) -> List[AudioChunk]:
         client = await self._get_client()
-        voice = voice or self.config.voice_id
+        
+        if self.config.engine == "elevenlabs" and gender:
+            if gender.upper() == "F":
+                voice = "yj30vwTGJxSHezdAGsv9"
+            else:
+                voice = voice or self.config.voice_id
+        else:
+            voice = voice or self.config.voice_id
+            
         return await client.generate_audio_chunks(text_chunks=text_chunks, voice=voice, with_timestamps=with_timestamps, **kwargs)
     
     async def get_available_voices(self) -> List[Dict[str, Any]]:
@@ -144,6 +163,7 @@ async def generate_title_and_story_audio(
     title: str,
     story_text_chunks: List[str],
     voice: Optional[str] = None,
+    gender: Optional[str] = None,
     engine: Optional[str] = None,
     buffer_seconds: float = 0.5,
     **kwargs,
@@ -152,12 +172,12 @@ async def generate_title_and_story_audio(
     async with await get_tts_client(engine=engine, voice=voice) as router:
         # Generate title audio
         title_audio_path, title_duration, title_timestamps = await router.text_to_speech_with_timestamps(
-            text=title, voice=voice, **kwargs
+            text=title, voice=voice, gender=gender, **kwargs
         )
         
         # Generate story audio chunks
         story_audio_chunks = await router.generate_audio_chunks(
-            text_chunks=story_text_chunks, voice=voice, with_timestamps=True, **kwargs
+            text_chunks=story_text_chunks, voice=voice, gender=gender, with_timestamps=True, **kwargs
         )
         
         if not story_audio_chunks:

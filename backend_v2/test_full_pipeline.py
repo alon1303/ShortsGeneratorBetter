@@ -25,7 +25,7 @@ async def test_full_pipeline():
         # Use a broader list of subreddits to ensure we find stories
         subreddits=["AmItheAsshole", "tifu", "TrueOffMyChest", "pettyrevenge", "EntitledParents"],
         stories_per_run=1,             # Only process one story
-        max_video_duration_minutes=2,  # Limit duration for faster testing
+        max_video_duration_minutes=5,  # Limit duration for faster testing
         upload_to_youtube=False,        # Disable upload for test
         skip_processed_posts=False      # Don't skip during test
     )

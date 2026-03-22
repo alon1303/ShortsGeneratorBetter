@@ -50,6 +50,7 @@ class ProcessedStory:
     total_parts: int
     total_duration: float
     strategy_used: SplitStrategy
+    detected_gender: Optional[str] = None # "M" or "F"
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -65,6 +66,7 @@ class ProcessedStory:
             "total_parts": self.total_parts,
             "total_duration": self.total_duration,
             "strategy_used": self.strategy_used.value,
+            "detected_gender": self.detected_gender,
         }
 
 class StoryProcessor:
@@ -286,7 +288,35 @@ class StoryProcessor:
             parts.append(part)
         
         return parts
-    
+
+    def detect_gender(self, title: str, text: str) -> Optional[str]:
+        """
+        Detects gender from title or text looking for patterns like (24F), [M30], etc.
+        Returns "M", "F" or None.
+        """
+        # Patterns like (24F), [24M], (F25), [M], etc.
+        patterns = [
+            r'\((\d+)?([MF])\)',
+            r'\[(\d+)?([MF])\]',
+            r'\(?([MF])(\d+)?\)?',
+            r'\bI\'m a (\d+)\s?(year old)?\s?([mf])\b',
+            r'\bI am a (\d+)\s?(year old)?\s?([mf])\b'
+        ]
+        
+        combined_text = title + " " + text[:500] # Check title and beginning of text
+        
+        for pattern in patterns:
+            match = re.search(pattern, combined_text, re.IGNORECASE)
+            if match:
+                # Find which group contains M or F
+                for group in match.groups():
+                    if group and group.upper() in ["M", "F"]:
+                        gender = group.upper()
+                        logger.info(f"Detected gender: {gender}")
+                        return gender
+        
+        return None
+
     def process_story(
         self,
         story: RedditStory,
@@ -308,6 +338,8 @@ class StoryProcessor:
             f"Processing story: '{story.title[:50]}...' "
             f"({story.word_count} words, {story.estimated_duration:.1f}s)"
         )
+
+        detected_gender = self.detect_gender(story.title, story.text)
 
         # Evaluate whether to split
         should_split = split_into_parts and story.estimated_duration > 180.0
@@ -338,6 +370,7 @@ class StoryProcessor:
                 total_parts=1,
                 total_duration=duration,
                 strategy_used=strategy,
+                detected_gender=detected_gender,
             )
             
             logger.info(
@@ -403,6 +436,7 @@ class StoryProcessor:
             total_parts=len(parts),
             total_duration=total_duration,
             strategy_used=strategy,
+            detected_gender=detected_gender,
         )
 
         logger.info(

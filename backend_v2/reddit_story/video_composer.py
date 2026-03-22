@@ -331,6 +331,44 @@ class VideoComposer:
                 return final_path
         return output_path
     
+    def extract_thumbnail(self, video_path: Path, output_path: Path, timestamp: float = 1.0) -> bool:
+        """
+        Extracts a single frame from the video at a specific timestamp to use as a thumbnail.
+        
+        Args:
+            video_path: Path to the source video file
+            output_path: Path where the thumbnail image will be saved
+            timestamp: Time in seconds from the start of the video to extract the frame
+            
+        Returns:
+            True if extraction was successful, False otherwise
+        """
+        try:
+            logger.info(f"Extracting thumbnail from {video_path} at {timestamp}s")
+            
+            # command: ffmpeg -ss [timestamp] -i [video] -vframes 1 -q:v 2 [output]
+            # -q:v 2 sets high quality for jpeg
+            cmd = [
+                'ffmpeg', '-y',
+                '-ss', str(timestamp),
+                '-i', str(video_path),
+                '-vframes', '1',
+                '-q:v', '2',
+                str(output_path)
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                logger.error(f"Failed to extract thumbnail: {result.stderr}")
+                return False
+                
+            return output_path.exists() and output_path.stat().st_size > 0
+            
+        except Exception as e:
+            logger.error(f"Error during thumbnail extraction: {e}")
+            return False
+
     def concatenate_videos(self, video_paths: List[Path], output_path: Path) -> bool:
         try:
             with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:

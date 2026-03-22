@@ -391,7 +391,7 @@ class AutoPipeline:
                 title=story.title,
                 story_text_chunks=text_chunks,
                 voice=self.voice_id,
-                title_voice=self.voice_id,
+                gender=processed_story.detected_gender,
                 engine=settings.TTS_ENGINE.lower(),
                 buffer_seconds=1.0,  # Changed from 0.0 to 1.0 to give proper lingering time
             )
@@ -449,15 +449,14 @@ class AutoPipeline:
                 raise ValueError("Failed to create video parts")
             
             # Step 7: Concatenate all parts into final video
+            final_video_path = post_output_dir / f"{post_folder_name}_final.mp4"
             if len(video_parts) == 1:
                 # Only one part, use it as final video
-                final_video_path = post_output_dir / f"{post_folder_name}_final.mp4"
                 import shutil
                 shutil.copy2(video_parts[0], final_video_path)
                 logger.info(f"Single part copied to final video: {final_video_path}")
             else:
                 # Concatenate multiple parts
-                final_video_path = post_output_dir / f"{post_folder_name}_final.mp4"
                 success = composer.concatenate_videos(video_parts, final_video_path)
                 
                 if not success:
@@ -465,6 +464,22 @@ class AutoPipeline:
                 
                 logger.info(f"Concatenated {len(video_parts)} parts into final video: {final_video_path}")
             
+            # Step 7.5: Generate Thumbnail
+            try:
+                thumbnail_path = post_output_dir / "thumbnail.jpg"
+                # Use timing data to find the best spot for thumbnail (middle of title card)
+                extract_time = 1.0
+                if timing_data and 'title_audio_duration' in timing_data:
+                    extract_time = float(timing_data['title_audio_duration']) / 2.0
+                
+                thumb_success = composer.extract_thumbnail(final_video_path, thumbnail_path, timestamp=extract_time)
+                if thumb_success:
+                    logger.info(f"Thumbnail generated successfully: {thumbnail_path}")
+                else:
+                    logger.warning("Failed to generate thumbnail, but proceeding with video.")
+            except Exception as te:
+                logger.warning(f"Error during thumbnail generation: {te}")
+
             # Get video duration
             try:
                 import subprocess
@@ -834,7 +849,7 @@ async def run_pipeline_from_cli():
     
     parser = argparse.ArgumentParser(description='ShortsGenerator Automation Pipeline')
     parser.add_argument('--subreddits', nargs='+', help='Subreddits to fetch from')
-    parser.add_argument('--stories', type=int, default=3, help='Stories per cycle')
+    parser.add_argument('--stories', type=int, default=None, help='Stories per cycle (overrides default)')
     parser.add_argument('--max-duration', type=int, default=3, help='Max video duration in minutes')
     parser.add_argument('--theme', help='Background theme')
     parser.add_argument('--voice', help='TTS voice ID')
@@ -850,9 +865,10 @@ async def run_pipeline_from_cli():
     args = parser.parse_args()
     
     # Create pipeline
+    stories_per_run = args.stories if args.stories is not None else 3
     pipeline = AutoPipeline(
         subreddits=args.subreddits,
-        stories_per_run=args.stories,
+        stories_per_run=stories_per_run,
         max_video_duration_minutes=args.max_duration,
         theme=args.theme,
         voice_id=args.voice,

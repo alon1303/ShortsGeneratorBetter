@@ -26,8 +26,11 @@ The ShortsGenerator video generation pipeline is operational with core functiona
   - **Dynamic background sequencing** with random theme switching (5-10 second clips)
   - Word-level subtitle synchronization
   - Title card overlay with slowed-down animations (0.6s in, 0.8s out) and 2s buffer
-  - 1.4x speed post-processing option
+  - 1.2x speed post-processing option
   - Background music integration
+>>>>>>>------- SEARCH
+3. **Speed Options**: 1.4x speed processing for platform optimization
+3. **Speed Options**: 1.2x speed processing for platform optimization
 - **BackgroundManager**: Dynamic background video management
   - **Random theme switching** per clip for enhanced visual variety
   - Configurable clip durations (5-10 seconds by default)
