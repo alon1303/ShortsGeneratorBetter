@@ -1,0 +1,64 @@
+import yt_dlp
+import os
+
+# הרשימה שלך כבר בפנים!
+links = [
+    "https://www.tiktok.com/@woahdude/video/6931005926627478789",
+    "https://www.tiktok.com/@asmrvideos786/video/7538524358436736269",
+    "https://www.tiktok.com/@tumbling_bottles/video/7491560735173102879",
+    "https://www.tiktok.com/@the.entertaining.hub/video/7273825850204638494",
+    "https://www.tiktok.com/@aasmr.bottles/video/7298337348918447362",
+    "https://www.tiktok.com/@splash_avalanche/video/7372380174282755370",
+    "https://www.tiktok.com/@tumbling_bottles/video/7473459452666989870",
+    "https://www.tiktok.com/@qualityrandomclips/video/7547404869171383575",
+    "https://www.tiktok.com/@popabottle/video/7285252550972984618",
+    "https://www.tiktok.com/@lalazo11/video/7279883458900413729",
+    "https://www.tiktok.com/@splash_avalanche/video/7315611918188760362",
+    "https://www.tiktok.com/@hpc_official/video/6939739394588855557",
+    "https://www.tiktok.com/@relaxify/video/7000311732635815174",
+    "https://www.tiktok.com/@hpc_official/video/6933260129886276870",
+    "https://www.tiktok.com/@hpc_official/video/7321416967057886496",
+    "https://www.tiktok.com/@hydraulic.press49/video/7592678454689058078",
+    "https://www.tiktok.com/@just.enjoy94/video/7392620595013242120",
+    "https://www.tiktok.com/@sameermwt1/video/7336110349663489285",
+    "https://www.tiktok.com/@hpc_official/video/6969991771606633734",
+    "https://www.tiktok.com/@hpc_official/video/6856131299279637765",
+    "https://www.tiktok.com/@umeredraz/video/7571879941684464916",
+    "https://www.tiktok.com/@sameermwt1/video/7346757350201625862",
+    "https://www.tiktok.com/@hydraulicpresschannel14/video/7511024321037339922",
+    "https://www.tiktok.com/@hzzzh009/video/7603396356945857813",
+    "https://www.tiktok.com/@cozynekos0/video/7184995171392621866",
+    "https://www.tiktok.com/@lilly_the_ragdolll/video/7591957223912246560",
+    "https://www.tiktok.com/@mmcats/video/7523202626222148882",
+    "https://www.tiktok.com/@petflix07/video/7508026932664044807",
+    "https://www.tiktok.com/@dookieandluca/video/7478463528165231903",
+    "https://www.tiktok.com/@louisthebear_/video/7558777953744637217",
+    "https://www.tiktok.com/@asdusa52/video/7616297792574737694",
+    "https://www.tiktok.com/@dansfoodforthought/video/7209900256593497346",
+    "https://www.tiktok.com/@road.munch/video/7476887835673365762",
+    "https://www.tiktok.com/@realekeats/video/7508070285103435064",
+    "https://www.tiktok.com/@road.munch/video/7313611172949789985",
+    "https://www.tiktok.com/@yummyyam37/video/7520075012221488402",
+    "https://www.tiktok.com/@yummyyam37/video/7607292760105749767",
+    "https://www.tiktok.com/@yummyyam37/video/7570734559940201736",
+    "https://www.tiktok.com/@moralquotes1/video/7599290450612145430",
+    "https://www.tiktok.com/@loithithamcuatoi/video/7428935287004204331",
+    "https://www.tiktok.com/@soap.asmr_7/video/7567448375860170007"
+]
+
+def quick_download():
+    # הגדרות הורדה בסיסיות לתיקייה אחת כדי לא להסתבך
+    ydl_opts = {
+        'outtmpl': 'downloads/%(title).50s.%(ext)s',
+        'quiet': False,
+    }
+
+    if not os.path.exists('downloads'):
+        os.makedirs('downloads')
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        print(f"מתחיל להוריד {len(links)} סרטונים...")
+        ydl.download(links)
+
+if __name__ == "__main__":
+    quick_download()
