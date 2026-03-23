@@ -46,6 +46,8 @@ class AudioChunk:
     file_size_bytes: int
     word_timestamps: Optional[List[WordTimestamp]] = None
     is_first_part: bool = False
+    power_words: Optional[List[str]] = None
+    part_index: Optional[str] = None  # e.g., "1/3"
     title_word_count: int = 0
     
     def to_dict(self) -> Dict[str, Any]:
@@ -59,4 +61,7 @@ class AudioChunk:
             "file_size_bytes": self.file_size_bytes,
             "has_word_timestamps": self.word_timestamps is not None and len(self.word_timestamps) > 0,
             "word_count": len(self.word_timestamps) if self.word_timestamps else 0,
+            "power_words": self.power_words,
+            "part_index": self.part_index,
+            "title_word_count": self.title_word_count,
         }

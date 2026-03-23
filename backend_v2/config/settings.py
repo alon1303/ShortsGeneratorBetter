@@ -111,6 +111,11 @@ class Settings(BaseSettings):
     MAX_PART_DURATION: int = 60
     MAX_PARTS: int = 5
     
+    # AI Story Splitting
+    STORY_AI_SPLIT_THRESHOLD: float = 180.0
+    AI_MIN_PART_DURATION: int = 50
+    AI_WORDS_PER_MINUTE: int = 150
+    
     # Caching
     CACHE_TTL: int = 3600
     ENABLE_CACHE: bool = True
