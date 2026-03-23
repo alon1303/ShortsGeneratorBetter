@@ -239,9 +239,87 @@ class VideoComposer:
             with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
                 for p in vps: f.write(f"file '{str(p).replace('\\','/')}'\n")
                 fl = Path(f.name)
-            subprocess.run(['ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', str(fl), '-c', 'copy', str(output_path)])
-            fl.unlink()
+            self.concatenate_videos(vps, output_path)
+        
+        # Apply speed-up if configured
+        if hasattr(settings, 'FINAL_VIDEO_SPEED') and settings.FINAL_VIDEO_SPEED > 1.0:
+            logger.info(f"Applying final video speed-up: {settings.FINAL_VIDEO_SPEED}x")
+            sped_up_path = self.apply_speed_up(output_path, settings.FINAL_VIDEO_SPEED)
+            if sped_up_path:
+                # Replace original with sped-up version
+                sped_up_path.replace(output_path)
+                
         return output_path
+
+    def concatenate_videos(self, video_paths: List[Path], output_path: Path) -> bool:
+        """
+        Concatenate multiple video files into one.
+        
+        Args:
+            video_paths: List of paths to video files
+            output_path: Path to the output video file
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+                for p in video_paths:
+                    f.write(f"file '{str(p).replace('\\','/')}'\n")
+                file_list_path = Path(f.name)
+            
+            cmd = [
+                'ffmpeg', '-y',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', str(file_list_path),
+                '-c', 'copy',
+                str(output_path)
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            file_list_path.unlink()
+            
+            return result.returncode == 0 and output_path.exists()
+        except Exception as e:
+            logger.error(f"Concatenation failed: {e}")
+            return False
+
+    def apply_speed_up(self, video_path: Path, speed: float) -> Optional[Path]:
+        """
+        Speed up a video file using FFmpeg.
+        
+        Args:
+            video_path: Path to the video file
+            speed: Speed multiplier (e.g., 1.5)
+            
+        Returns:
+            Path to the sped-up video file or None if failed
+        """
+        try:
+            output_path = video_path.parent / f"sped_up_{video_path.name}"
+            
+            # Use setpts for video and atempo for audio
+            # atempo has a limit of 2.0, but we are using 1.5
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', str(video_path),
+                '-filter_complex', f'[0:v]setpts={1.0/speed}*PTS[v];[0:a]atempo={speed}[a]',
+                '-map', '[v]', '-map', '[a]',
+                '-c:v', 'libx264', '-preset', settings.VIDEO_PRESET, '-crf', str(settings.VIDEO_CRF),
+                '-c:a', 'aac', '-b:a', settings.AUDIO_BITRATE,
+                str(output_path)
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0 and output_path.exists():
+                return output_path
+            else:
+                logger.error(f"Speed-up failed: {result.stderr}")
+                return None
+        except Exception as e:
+            logger.error(f"Error applying speed-up: {e}")
+            return None
 
 def create_shorts_video(audio_chunks, theme=None, output_path=None, overlay_image_path=None, pop_sfx_path=None, bg_music_path=None, timing_data=None, custom_keywords=None):
     return VideoComposer().create_complete_shorts_video(audio_chunks, theme, output_path, overlay_image_path, pop_sfx_path, bg_music_path, timing_data, custom_keywords)

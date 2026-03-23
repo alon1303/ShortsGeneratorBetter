@@ -110,7 +110,7 @@ class Settings(BaseSettings):
     VIDEO_CRF: int = 23
     VIDEO_PRESET: str = "veryfast"
     AUDIO_BITRATE: str = "128k"
-    FINAL_VIDEO_SPEED: float = 1.2
+    FINAL_VIDEO_SPEED: float = 1.5
     
     # Story segmentation
     MIN_PART_DURATION: int = 30
