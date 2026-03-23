@@ -13,6 +13,7 @@ import pysubs2
 
 from .models import WordTimestamp
 from .image_generator_new import RedditImageGenerator
+from .audio_utils import map_timestamp_to_new_time
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -72,26 +73,70 @@ class SubtitleGenerator:
         current_phrase_words = []
         current_phrase_start = word_timestamps[0].start
         
-        for i, word_ts in enumerate(word_timestamps):
+        i = 0
+        while i < len(word_timestamps):
+            word_ts = word_timestamps[i]
+            
+            # Check for special CTA phrase: "Like and subscribe for Part X"
+            # If we are starting a CTA, and we have pending words, flush them first
+            if word_ts.word.upper() == "LIKE" and (i + 3) < len(word_timestamps):
+                lookahead = " ".join(w.word.upper() for w in word_timestamps[i:i+4])
+                if "LIKE AND SUBSCRIBE FOR" in lookahead:
+                    if current_phrase_words:
+                        # Flush current phrase
+                        phrase_end = current_phrase_words[-1].end
+                        phrase_text = " ".join(w.word for w in current_phrase_words)
+                        phrases.append(Phrase(
+                            words=current_phrase_words.copy(),
+                            start_time=current_phrase_start,
+                            end_time=phrase_end,
+                            text=phrase_text
+                        ))
+                        current_phrase_words = []
+                        # Note: current_phrase_start will be updated below
+                    
+                    # Now handle the CTA as its own phrase (or sequence of phrases)
+                    # We'll just set a flag or handle it by letting the normal logic take over
+                    # but starting from a fresh phrase.
+                    current_phrase_start = word_ts.start
+
             current_phrase_words.append(word_ts)
             
             should_end_phrase = False
             
+            # Standard word count limit
             if len(current_phrase_words) >= self.max_words_per_phrase:
                 should_end_phrase = True
             
+            # Check gap with next word
             if i + 1 < len(word_timestamps):
                 next_word = word_timestamps[i + 1]
+                
+                # Check if next word starts the CTA - if so, end current phrase
+                lookahead_next = ""
+                if next_word.word.upper() == "LIKE" and (i + 4) < len(word_timestamps):
+                    lookahead_next = " ".join(w.word.upper() for w in word_timestamps[i+1:i+5])
+                
+                if "LIKE AND SUBSCRIBE FOR" in lookahead_next:
+                    should_end_phrase = True
+                
                 gap = next_word.start - word_ts.end
                 if gap > 0.5:
                     should_end_phrase = True
             
+            # Max duration limit
             phrase_duration = word_ts.end - current_phrase_start
             if phrase_duration > self.max_phrase_duration:
                 should_end_phrase = True
             
+            # Minimum word count enforcement (unless it's the last word or a forced break)
             if should_end_phrase and len(current_phrase_words) < self.min_words_per_phrase:
-                should_end_phrase = False
+                # But don't override if it's a huge gap or CTA
+                if i + 1 < len(word_timestamps):
+                    next_word = word_timestamps[i + 1]
+                    if (next_word.start - word_ts.end) <= 0.5:
+                        # Not a huge gap, so try to keep it together
+                        should_end_phrase = False
             
             if should_end_phrase or i == len(word_timestamps) - 1:
                 phrase_end = word_ts.end
@@ -109,6 +154,8 @@ class SubtitleGenerator:
                 current_phrase_words = []
                 if i + 1 < len(word_timestamps):
                     current_phrase_start = word_timestamps[i + 1].start
+            
+            i += 1
         
         phrases = self._adjust_phrase_timing(phrases, audio_duration)
         return phrases
@@ -176,8 +223,6 @@ class SubtitleGenerator:
     def _generate_phrase_events_with_pysubs2(self, phrase: Phrase, min_start_time: float = 0.0, custom_keywords: Optional[List[str]] = None) -> List[pysubs2.SSAEvent]:
         """
         Generate ASS events for a phrase, with current-word highlighting.
-        NOTE: Red keyword highlighting is currently disabled for full transcription 
-        to keep the look clean, but custom_keywords is kept for future use.
         """
         events = []
         min_start_ms = int(min_start_time * 1000)
@@ -202,7 +247,6 @@ class SubtitleGenerator:
             
             for j, word_ts in enumerate(phrase.words):
                 word_text = word_ts.word.upper()
-                # Active word is yellow, all others are white
                 needed_color = COLOR_YELLOW if j == i else COLOR_WHITE
                 
                 if needed_color != current_color:
@@ -234,10 +278,25 @@ class SubtitleGenerator:
         audio_duration: float,
         output_path: Path,
         min_start_time: float = 0.0,
-        custom_keywords: Optional[List[str]] = None
+        custom_keywords: Optional[List[str]] = None,
+        timing_map: Optional[List[Dict[str, float]]] = None
     ) -> bool:
         try:
-            phrases = self.chunk_words_into_phrases(word_timestamps, audio_duration)
+            # If timing_map is provided, adjust all word timestamps first
+            adjusted_timestamps = word_timestamps
+            if timing_map:
+                adjusted_timestamps = []
+                for ts in word_timestamps:
+                    new_start = map_timestamp_to_new_time(ts.start, timing_map)
+                    new_end = map_timestamp_to_new_time(ts.end, timing_map)
+                    adjusted_timestamps.append(WordTimestamp(
+                        word=ts.word,
+                        start=new_start,
+                        end=new_end,
+                        confidence=ts.confidence
+                    ))
+
+            phrases = self.chunk_words_into_phrases(adjusted_timestamps, audio_duration)
             if phrases:
                 phrases = self._adjust_phrase_timing(phrases, audio_duration, min_start_time)
             if not phrases:
@@ -253,9 +312,10 @@ class SubtitleGenerator:
         self,
         word_timestamps: List[WordTimestamp],
         audio_duration: float,
-        output_path: Path
+        output_path: Path,
+        timing_map: Optional[List[Dict[str, float]]] = None
     ) -> bool:
-        return self.generate_ass_with_pysubs2(word_timestamps, audio_duration, output_path)
+        return self.generate_ass_with_pysubs2(word_timestamps, audio_duration, output_path, timing_map=timing_map)
     
     def filter_and_adjust_timestamps(
         self,
@@ -276,30 +336,37 @@ class SubtitleGenerator:
         audio_duration: float,
         output_path: Path,
         min_start_time: float = 0.0,
-        custom_keywords: Optional[List[str]] = None
+        custom_keywords: Optional[List[str]] = None,
+        timing_map: Optional[List[Dict[str, float]]] = None
     ) -> Tuple[bool, float]:
         try:
             story_timestamps, title_duration = self.filter_and_adjust_timestamps(
                 word_timestamps, title_word_count
             )
             if story_timestamps:
+                # If timing_map is provided, we should probably adjust title_duration too
+                # but title_duration is often used for title card overlay which is handled separately.
+                # The crucial part is that the story_timestamps themselves will be adjusted inside generate_ass_with_pysubs2
                 story_timestamps[0].start = max(story_timestamps[0].start, min_start_time)
                 if story_timestamps[0].start >= story_timestamps[0].end:
                     story_timestamps[0].end = story_timestamps[0].start + 0.1
             
             success = self.generate_ass_with_pysubs2(
-                story_timestamps, audio_duration, output_path, min_start_time=min_start_time, custom_keywords=custom_keywords
+                story_timestamps, audio_duration, output_path, 
+                min_start_time=min_start_time, 
+                custom_keywords=custom_keywords,
+                timing_map=timing_map
             )
             return success, title_duration
         except Exception as e:
             logger.error(f"Failed in generate_ass_with_title_filter: {e}")
             return False, 0.0
 
-    def generate_ass_from_text(self, text: str, audio_duration: float, output_path: Path) -> bool:
+    def generate_ass_from_text(self, text: str, audio_duration: float, output_path: Path, timing_map: Optional[List[Dict[str, float]]] = None) -> bool:
         try:
             words = text.split()
             avg = audio_duration / max(1, len(words))
             w_ts = [WordTimestamp(word=w, start=i*avg, end=(i+1)*avg, confidence=1.0) for i, w in enumerate(words)]
-            return self.generate_ass_from_word_timestamps(w_ts, audio_duration, output_path)
+            return self.generate_ass_from_word_timestamps(w_ts, audio_duration, output_path, timing_map=timing_map)
         except Exception:
             return False

@@ -302,11 +302,12 @@ class StoryProcessor:
                 start_index = story.text.find(part_text, max(0, current_pos - 100))
                 if start_index == -1: start_index = current_pos
                 
+                word_count = len(part_text.split())
                 part = StoryPart(
                     part_number=i,
                     text=part_text,
-                    word_count=len(part_text.split()),
-                    estimated_duration=self._words_to_duration(len(part_text.split())),
+                    word_count=word_count,
+                    estimated_duration=self._words_to_duration(word_count),
                     start_index=start_index,
                     end_index=start_index + len(part_text),
                     power_words=part_data.get("power_words", [])
@@ -330,12 +331,14 @@ class StoryProcessor:
     async def _extract_power_words_single(self, text: str) -> List[str]:
         """Extract power words for a single part."""
         if not self.ai_available: return []
-        prompt = f"Extract 3-5 'Power Words' from this text. Return JSON array only.\nText: {text[:2000]}"
+        prompt = f"Extract 3-5 'Power Words' from this text. Return JSON array ONLY of strings. Example: ['WORD1', 'WORD2']\nText: {text[:2000]}"
         try:
             response = self.model.generate_content(prompt)
             json_text = response.text.strip()
             if "```json" in json_text: json_text = json_text.split("```json")[1].split("```")[0].strip()
-            return json.loads(json_text)
+            elif "```" in json_text: json_text = json_text.split("```")[1].split("```")[0].strip()
+            data = json.loads(json_text)
+            return data if isinstance(data, list) else []
         except: return []
 
     async def process_story(
@@ -395,8 +398,11 @@ class StoryProcessor:
                 if "Like and subscribe for Part" not in part.text:
                     part.text += cta
                     part.word_count = len(part.text.split())
-                    # Ensure duration is updated
                     part.estimated_duration = self._words_to_duration(part.word_count)
+            
+            if not part.estimated_duration:
+                part.word_count = len(part.text.split())
+                part.estimated_duration = self._words_to_duration(part.word_count)
 
     def validate_parts(self, processed_story: ProcessedStory) -> bool:
         return all(p.estimated_duration >= 15 for p in processed_story.parts)

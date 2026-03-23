@@ -12,6 +12,7 @@ from config.settings import settings
 from .models import WordTimestamp, AudioChunk
 from .edgetts_client import EdgeTTSClient
 from .elevenlabs_client import ElevenLabsClient
+from .audio_utils import remove_silences, get_audio_duration
 import subprocess
 import tempfile
 import shutil
@@ -182,6 +183,17 @@ async def generate_title_and_story_audio(
         
         if not story_audio_chunks:
             raise ValueError("No story audio chunks were generated")
+
+        # Apply silence removal to all story chunks if enabled
+        if settings.REMOVE_SILENCES:
+            logger.info("Applying silence removal to story audio chunks")
+            for chunk in story_audio_chunks:
+                cleaned_path, timing_map = remove_silences(chunk.audio_path)
+                if timing_map:
+                    chunk.audio_path = cleaned_path
+                    chunk.timing_map = timing_map
+                    chunk.duration_seconds = get_audio_duration(cleaned_path)
+                    chunk.file_size_bytes = cleaned_path.stat().st_size
 
         # Merge Title with the FIRST chunk for Part 1 synchronization
         first_chunk = story_audio_chunks[0]

@@ -55,7 +55,8 @@ class VideoComposer:
         title_word_count: int = 0,
         is_first_part: bool = False,
         timing_data: Optional[Dict[str, Any]] = None,
-        custom_keywords: Optional[List[str]] = None
+        custom_keywords: Optional[List[str]] = None,
+        timing_map: Optional[List[Dict[str, float]]] = None
     ) -> bool:
         generator = SubtitleGenerator(
             video_width=1080,
@@ -84,7 +85,8 @@ class VideoComposer:
                     audio_duration=audio_duration,
                     output_path=output_path,
                     min_start_time=min_start_time,
-                    custom_keywords=custom_keywords
+                    custom_keywords=custom_keywords,
+                    timing_map=timing_map
                 )
                 return success
             else:
@@ -96,14 +98,16 @@ class VideoComposer:
                     audio_duration=audio_duration + title_offset,
                     output_path=output_path,
                     min_start_time=0.0,
-                    custom_keywords=custom_keywords
+                    custom_keywords=custom_keywords,
+                    timing_map=timing_map
                 )
                 return success
         else:
             return generator.generate_ass_from_text(
                 text=text,
                 audio_duration=audio_duration + title_offset,
-                output_path=output_path
+                output_path=output_path,
+                timing_map=timing_map
             )
     
     def combine_audio_with_background(
@@ -197,7 +201,17 @@ class VideoComposer:
             bg = self.background_manager.create_sequential_background_clip(audio_chunk.duration_seconds, theme, tp / "bg.mp4")
             if not bg: return None
             sub_path = tp / "subs.ass"
-            self.create_subtitles_for_text(audio_chunk.text, audio_chunk.duration_seconds, sub_path, audio_chunk.word_timestamps, audio_chunk.audio_path, timing_data=timing_data, custom_keywords=custom_keywords, title_word_count=timing_data.get('title_word_count', 0) if timing_data else 0)
+            self.create_subtitles_for_text(
+                audio_chunk.text, 
+                audio_chunk.duration_seconds, 
+                sub_path, 
+                audio_chunk.word_timestamps, 
+                audio_chunk.audio_path, 
+                timing_data=timing_data, 
+                custom_keywords=custom_keywords, 
+                title_word_count=timing_data.get('title_word_count', 0) if timing_data else 0,
+                timing_map=audio_chunk.timing_map
+            )
             if not self.combine_audio_with_background(audio_chunk.audio_path, bg, output_path, sub_path, overlay_image_path, pop_sfx_path=pop_sfx_path, bg_music_path=bg_music_path, timing_data=timing_data):
                 return None
         

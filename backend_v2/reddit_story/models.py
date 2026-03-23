@@ -49,6 +49,7 @@ class AudioChunk:
     power_words: Optional[List[str]] = None
     part_index: Optional[str] = None  # e.g., "1/3"
     title_word_count: int = 0
+    timing_map: Optional[List[Dict[str, float]]] = None  # Map of silence removals
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -64,4 +65,5 @@ class AudioChunk:
             "power_words": self.power_words,
             "part_index": self.part_index,
             "title_word_count": self.title_word_count,
+            "has_timing_map": self.timing_map is not None and len(self.timing_map) > 0,
         }

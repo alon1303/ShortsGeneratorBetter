@@ -11,6 +11,7 @@ import uuid
 from elevenlabs.client import ElevenLabs
 from config.settings import settings
 from .models import WordTimestamp, AudioChunk
+from .audio_utils import remove_silences, map_timestamp_to_new_time
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,17 @@ class ElevenLabsClient:
                     except Exception as e:
                         logger.warning(f"Failed to load cached timestamps: {e}")
                 
+                # Apply silence removal even for cached files if enabled
+                if settings.REMOVE_SILENCES:
+                    cleaned_path, timing_map = remove_silences(cached_path)
+                    if timing_map:
+                        cached_path = cleaned_path
+                        duration = await self._estimate_duration(cached_path)
+                        if word_timestamps:
+                            for ts in word_timestamps:
+                                ts.start = map_timestamp_to_new_time(ts.start, timing_map)
+                                ts.end = map_timestamp_to_new_time(ts.end, timing_map)
+                
                 return cached_path, duration, word_timestamps
 
         try:
@@ -144,6 +156,16 @@ class ElevenLabsClient:
             with open(json_path, "w", encoding='utf-8') as f:
                 json.dump([w.to_dict() for w in word_timestamps], f, indent=2)
                 
+            # Apply silence removal after generation if enabled
+            if settings.REMOVE_SILENCES:
+                cleaned_path, timing_map = remove_silences(file_path)
+                if timing_map:
+                    file_path = cleaned_path
+                    if word_timestamps:
+                        for ts in word_timestamps:
+                            ts.start = map_timestamp_to_new_time(ts.start, timing_map)
+                            ts.end = map_timestamp_to_new_time(ts.end, timing_map)
+
             duration = await self._estimate_duration(file_path)
             return file_path, duration, word_timestamps
             

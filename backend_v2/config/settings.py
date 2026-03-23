@@ -97,6 +97,12 @@ class Settings(BaseSettings):
     BACKGROUND_DYNAMIC_SWITCHING: bool = True
     BGM_VOLUME_DELTA: float = -10.0
     
+    # Audio processing / Jump Cuts
+    REMOVE_SILENCES: bool = True
+    SILENCE_THRESHOLD_DB: float = -40.0
+    MIN_SILENCE_DURATION_MS: int = 400
+    KEEP_SILENCE_MS: int = 100
+    
     # Video processing
     TARGET_WIDTH: int = 1080
     TARGET_HEIGHT: int = 1920

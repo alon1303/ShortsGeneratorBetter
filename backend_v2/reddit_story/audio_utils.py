@@ -4,9 +4,20 @@ Audio utility functions for detecting silence and calculating offsets.
 import subprocess
 import json
 import logging
+import tempfile
+import time
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict
 import re
+
+try:
+    from pydub import AudioSegment
+    from pydub.silence import detect_nonsilent
+    PYDUB_AVAILABLE = True
+except ImportError:
+    PYDUB_AVAILABLE = False
+
+from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +166,100 @@ def get_audio_start_time(audio_path: Path) -> float:
         Start time in seconds (0.0 if no significant silence)
     """
     return detect_silence_at_beginning(audio_path)
+
+def remove_silences(
+    audio_path: Path,
+    output_path: Optional[Path] = None,
+    threshold_db: Optional[float] = None,
+    min_silence_ms: Optional[int] = None,
+    keep_silence_ms: Optional[int] = None
+) -> Tuple[Path, List[Dict[str, float]]]:
+    """
+    Remove silences from audio and return the new path and a timing map.
+    
+    Returns:
+        Tuple of (new_audio_path, timing_map)
+        timing_map is a list of dicts: {"original_start": float, "new_start": float, "duration": float}
+    """
+    if not PYDUB_AVAILABLE:
+        logger.error("pydub not available, skipping silence removal")
+        return audio_path, []
+
+    threshold_db = threshold_db or settings.SILENCE_THRESHOLD_DB
+    min_silence_ms = min_silence_ms or settings.MIN_SILENCE_DURATION_MS
+    keep_silence_ms = keep_silence_ms or settings.KEEP_SILENCE_MS
+
+    try:
+        audio = AudioSegment.from_file(audio_path)
+        
+        # detect_nonsilent returns list of [start, end] in ms
+        nonsilent_chunks = detect_nonsilent(
+            audio, 
+            min_silence_len=min_silence_ms, 
+            silence_thresh=threshold_db
+        )
+
+        if not nonsilent_chunks:
+            return audio_path, []
+
+        new_audio = AudioSegment.empty()
+        timing_map = []
+        current_new_time_ms = 0
+
+        for start_ms, end_ms in nonsilent_chunks:
+            # Add some buffer silence before and after
+            chunk_start = max(0, start_ms - keep_silence_ms)
+            chunk_end = min(len(audio), end_ms + keep_silence_ms)
+            
+            chunk = audio[chunk_start:chunk_end]
+            new_audio += chunk
+            
+            timing_map.append({
+                "original_start": chunk_start / 1000.0,
+                "original_end": chunk_end / 1000.0,
+                "new_start": current_new_time_ms / 1000.0,
+                "duration": (chunk_end - chunk_start) / 1000.0
+            })
+            
+            current_new_time_ms += (chunk_end - chunk_start)
+
+        if output_path is None:
+            temp_dir = Path(tempfile.gettempdir()) / "shorts_audio_cleanup"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            output_path = temp_dir / f"cleaned_{int(time.time())}_{audio_path.name}"
+
+        new_audio.export(str(output_path), format="mp3", bitrate="128k")
+        logger.info(f"Removed silences: {audio_path.name} -> {output_path.name}. Original: {len(audio)/1000.0:.2f}s, New: {len(new_audio)/1000.0:.2f}s")
+        
+        return output_path, timing_map
+
+    except Exception as e:
+        logger.error(f"Error removing silences: {e}")
+        return audio_path, []
+
+def map_timestamp_to_new_time(original_time: float, timing_map: List[Dict[str, float]]) -> float:
+    """
+    Map an original timestamp to the new timestamp after silence removal.
+    """
+    if not timing_map:
+        return original_time
+        
+    for entry in timing_map:
+        if entry["original_start"] <= original_time <= entry["original_end"]:
+            # Time is within a kept chunk
+            offset = original_time - entry["original_start"]
+            return entry["new_start"] + offset
+        elif original_time < entry["original_start"]:
+            # Time is before this chunk (must have been in a deleted silent part or previous chunk)
+            # If we are here, and it wasn't in the previous chunk, it's in a gap.
+            # We map it to the start of the current chunk.
+            return entry["new_start"]
+            
+    # If it's after the last chunk
+    if timing_map:
+        return timing_map[-1]["new_start"] + timing_map[-1]["duration"]
+        
+    return original_time
 
 # Test function
 def test_audio_analysis():
