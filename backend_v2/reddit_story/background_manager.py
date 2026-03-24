@@ -176,7 +176,7 @@ class BackgroundManager:
                 str(video_path)
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
             data = json.loads(result.stdout)
 
             metadata = {
@@ -330,7 +330,7 @@ class BackgroundManager:
             ]
 
             logger.debug(f"Extracting clip with strict encoding: FPS={force_fps}, pixel_format={force_pixel_format}")
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
 
             if result.returncode != 0:
                 logger.error(f"FFmpeg failed with error: {result.stderr}")
@@ -376,7 +376,7 @@ class BackgroundManager:
                 str(temp_path)
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
             if result.returncode != 0:
                 logger.error(f"Re-encoding failed: {result.stderr}")
                 return False
@@ -698,7 +698,7 @@ class BackgroundManager:
             ]
             
             logger.debug(f"Concatenation command: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
             
             if result.returncode != 0:
                 logger.error(f"FFmpeg concatenation failed: {result.stderr}")
@@ -742,7 +742,7 @@ class BackgroundManager:
             str(output_path)
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
         
         if result.returncode != 0:
             logger.error(f"Fallback concatenation also failed: {result.stderr}")

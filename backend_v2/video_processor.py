@@ -365,7 +365,7 @@ def reframe_to_916_with_subtitles(input_path: str, output_path: str, subtitle_pa
         original_cwd = os.getcwd()
         try:
             os.chdir(subtitle_dir)
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True, encoding='utf-8')
             logger.debug(f"FFmpeg output: {result.stdout}")
         except subprocess.CalledProcessError as e:
             logger.error(f"FFmpeg command failed: {e}")

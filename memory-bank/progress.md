@@ -32,6 +32,7 @@ The ShortsGenerator video generation pipeline is **operational** with core funct
 >>>>>>>------- SEARCH
 ### Phase 1: Core Pipeline (Current - ✅)
 - [x] Reddit story to video conversion works end-to-end
+- [x] Removed thumbnail generation functionality
 - [x] Basic testing completed
 ### Phase 1: Core Pipeline (Current - ✅)
 - [x] Reddit story to video conversion works end-to-end

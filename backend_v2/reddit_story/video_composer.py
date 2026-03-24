@@ -124,7 +124,7 @@ class VideoComposer:
     ) -> bool:
         try:
             audio_cmd = ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', str(audio_path)]
-            audio_result = subprocess.run(audio_cmd, capture_output=True, text=True)
+            audio_result = subprocess.run(audio_cmd, capture_output=True, text=True, encoding='utf-8')
             audio_duration = float(audio_result.stdout.strip()) if audio_result.stdout else 0
             if audio_duration <= 0: return False
             
@@ -171,7 +171,11 @@ class VideoComposer:
                 
             cmd.extend(['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-c:a', 'aac', '-t', str(audio_duration), output_path.name])
             
-            subprocess.run(cmd, capture_output=True, text=True, cwd=temp_dir)
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=temp_dir, encoding='utf-8')
+            if result.returncode != 0:
+                logger.error(f"FFmpeg combine failed: {result.stderr}")
+                return False
+
             if (temp_dir / output_path.name).exists():
                 shutil.copy2(temp_dir / output_path.name, output_path)
             shutil.rmtree(temp_dir, ignore_errors=True)
@@ -239,7 +243,7 @@ class VideoComposer:
             with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
                 for p in vps: f.write(f"file '{str(p).replace('\\','/')}'\n")
                 fl = Path(f.name)
-            subprocess.run(['ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', str(fl), '-c', 'copy', str(output_path)])
+            subprocess.run(['ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', str(fl), '-c', 'copy', str(output_path)], capture_output=True, text=True, encoding='utf-8')
             fl.unlink()
         return output_path
 

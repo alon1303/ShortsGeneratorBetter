@@ -125,7 +125,11 @@ class AudioMixer:
                 output_path = self.output_dir / filename
             
             # Export mixed audio
-            mixed_audio.export(str(output_path), format="mp3", bitrate="128k")
+            try:
+                mixed_audio.export(str(output_path), format="mp3", bitrate="128k")
+            except Exception as e:
+                logger.error(f"Failed to export mixed title/pop audio: {e}")
+                return None
             
             # Verify file was created
             if output_path.exists() and output_path.stat().st_size > 0:
@@ -191,8 +195,12 @@ class AudioMixer:
                 content_hash = hashlib.md5(f"{main_audio_path}{bg_music_path}".encode()).hexdigest()[:8]
                 output_path = self.output_dir / f"with_bgm_{content_hash}_{int(time.time())}.mp3"
                 
-            mixed_audio.export(str(output_path), format="mp3", bitrate="128k")
-            return output_path
+            try:
+                mixed_audio.export(str(output_path), format="mp3", bitrate="128k")
+                return output_path
+            except Exception as e:
+                logger.error(f"Failed to export audio with background music: {e}")
+                return None
             
         except Exception as e:
             logger.error(f"Error mixing background music: {e}")
@@ -230,7 +238,11 @@ class AudioMixer:
                 filename = f"faded_audio_{content_hash}_{timestamp}.mp3"
                 output_path = self.output_dir / filename
             
-            faded.export(str(output_path), format="mp3", bitrate="128k")
+            try:
+                faded.export(str(output_path), format="mp3", bitrate="128k")
+            except Exception as e:
+                logger.error(f"Failed to export faded audio: {e}")
+                return None
             
             if output_path.exists() and output_path.stat().st_size > 0:
                 logger.info(f"Faded audio saved: {output_path}")
@@ -272,7 +284,11 @@ class AudioMixer:
                 filename = f"normalized_audio_{content_hash}_{timestamp}.mp3"
                 output_path = self.output_dir / filename
             
-            normalized.export(str(output_path), format="mp3", bitrate="128k")
+            try:
+                normalized.export(str(output_path), format="mp3", bitrate="128k")
+            except Exception as e:
+                logger.error(f"Failed to export normalized audio: {e}")
+                return None
             
             if output_path.exists() and output_path.stat().st_size > 0:
                 logger.info(f"Normalized audio saved: {output_path} (adjusted by {gain_db:.1f}dB)")
@@ -340,7 +356,11 @@ class AudioMixer:
                 filename = f"concatenated_audio_{content_hash}_{timestamp}.mp3"
                 output_path = self.output_dir / filename
             
-            concatenated.export(str(output_path), format="mp3", bitrate="128k")
+            try:
+                concatenated.export(str(output_path), format="mp3", bitrate="128k")
+            except Exception as e:
+                logger.error(f"Failed to export concatenated audio: {e}")
+                return None
             
             if output_path.exists() and output_path.stat().st_size > 0:
                 logger.info(f"Concatenated audio saved: {output_path}")

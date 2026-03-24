@@ -215,7 +215,7 @@ class EdgeTTSClient:
                 str(audio_path)
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
             if result.returncode == 0:
                 data = json.loads(result.stdout)
                 duration = float(data['format']['duration'])

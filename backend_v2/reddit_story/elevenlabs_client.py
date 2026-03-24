@@ -53,7 +53,7 @@ class ElevenLabsClient:
         """Get accurate duration using ffprobe."""
         try:
             cmd = ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'json', str(audio_path)]
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
             if result.returncode == 0:
                 return float(json.loads(result.stdout)['format']['duration'])
         except Exception:

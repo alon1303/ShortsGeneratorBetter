@@ -40,7 +40,7 @@ def get_audio_duration(audio_path: Path) -> float:
             str(audio_path)
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
         if result.returncode == 0:
             data = json.loads(result.stdout)
             duration = float(data['format']['duration'])
@@ -75,7 +75,7 @@ def detect_silence_at_beginning(audio_path: Path, silence_threshold_db: float = 
             '-f', 'null', '-'
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
         output = result.stderr
         
         # Parse silence detection output
@@ -228,9 +228,13 @@ def remove_silences(
             temp_dir.mkdir(parents=True, exist_ok=True)
             output_path = temp_dir / f"cleaned_{int(time.time())}_{audio_path.name}"
 
-        new_audio.export(str(output_path), format="mp3", bitrate="128k")
-        logger.info(f"Removed silences: {audio_path.name} -> {output_path.name}. Original: {len(audio)/1000.0:.2f}s, New: {len(new_audio)/1000.0:.2f}s")
-        
+        try:
+            new_audio.export(str(output_path), format="mp3", bitrate="128k")
+            logger.info(f"Removed silences: {audio_path.name} -> {output_path.name}. Original: {len(audio)/1000.0:.2f}s, New: {len(new_audio)/1000.0:.2f}s")
+        except Exception as e:
+            logger.error(f"Failed to export cleaned audio: {e}")
+            return audio_path, []
+            
         return output_path, timing_map
 
     except Exception as e:

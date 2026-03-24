@@ -1,3 +1,2 @@
-You are operating in the Video Generation branch using a Git Worktree. Your strictly defined scope is the core logic of video creation (TTS, backgrounds, subtitles, compositing). Do NOT modify automation pipeline files. Rely on the memory-bank for architecture specifics.
-If you run test make sure to delete the test files after.
+If you run test make sure to ask me if i would like to delete them right after.
 If you run commands in the terminal make sure you run them in POWERSHELL SYNTAX.

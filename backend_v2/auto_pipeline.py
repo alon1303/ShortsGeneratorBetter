@@ -241,6 +241,10 @@ class AutoPipeline:
                 buffer_seconds=1.0
             )
             
+            if final_audio_path is None or story_audio_chunks is None:
+                logger.error(f"TTS generation failed for story: {story.id}")
+                return None
+            
             composer = VideoComposer()
             video_parts = []
             for i, audio_chunk in enumerate(story_audio_chunks, 1):
@@ -259,10 +263,6 @@ class AutoPipeline:
             else:
                 composer.concatenate_videos(video_parts, final_video_path)
             
-            # Thumbnail extraction
-            thumbnail_path = post_output_dir / "thumbnail.jpg"
-            composer.extract_thumbnail(final_video_path, thumbnail_path, timestamp=1.0)
-
             self.reddit_client.mark_post_as_processed(story.id)
             self.stats.add_story_processed(success=True, story_duration=story.estimated_duration)
             return final_video_path
