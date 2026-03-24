@@ -311,7 +311,7 @@ class VideoComposer:
                 str(output_path)
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
             if result.returncode == 0 and output_path.exists():
                 return output_path
             else:
@@ -320,6 +320,34 @@ class VideoComposer:
         except Exception as e:
             logger.error(f"Error applying speed-up: {e}")
             return None
+
+    def extract_thumbnail(self, video_path: Path, output_path: Path, timestamp: float = 1.0) -> bool:
+        """
+        Extract a thumbnail from a video file.
+        
+        Args:
+            video_path: Path to the video file
+            output_path: Path to save the thumbnail image
+            timestamp: Time in seconds to extract the frame from
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            cmd = [
+                'ffmpeg', '-y',
+                '-ss', str(timestamp),
+                '-i', str(video_path),
+                '-vframes', '1',
+                '-q:v', '2',
+                str(output_path)
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+            return result.returncode == 0 and output_path.exists()
+        except Exception as e:
+            logger.error(f"Failed to extract thumbnail: {e}")
+            return False
 
 def create_shorts_video(audio_chunks, theme=None, output_path=None, overlay_image_path=None, pop_sfx_path=None, bg_music_path=None, timing_data=None, custom_keywords=None):
     return VideoComposer().create_complete_shorts_video(audio_chunks, theme, output_path, overlay_image_path, pop_sfx_path, bg_music_path, timing_data, custom_keywords)

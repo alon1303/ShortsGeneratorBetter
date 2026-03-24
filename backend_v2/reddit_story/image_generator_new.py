@@ -94,16 +94,30 @@ class RedditImageGenerator:
             raise RuntimeError("Playwright not available. Install with: pip install playwright")
         
         if self._browser is None:
-            self._playwright = await async_playwright().start()
-            self._browser = await self._playwright.chromium.launch(
-                headless=True,
-                args=['--disable-web-security', '--no-sandbox', '--disable-dev-shm-usage', '--disable-setuid-sandbox']
-            )
-            self._playwright_context = await self._browser.new_context(
-                viewport={'width': 1080, 'height': 1920},
-                device_scale_factor=2.0,
-            )
-            logger.debug("Playwright browser initialized")
+            try:
+                self._playwright = await async_playwright().start()
+                # Use a timeout of 30 seconds for launching the browser
+                # This prevents hanging indefinitely if there are environment issues
+                self._browser = await asyncio.wait_for(
+                    self._playwright.chromium.launch(
+                        headless=True,
+                        args=['--disable-web-security', '--no-sandbox', '--disable-dev-shm-usage', '--disable-setuid-sandbox']
+                    ),
+                    timeout=30.0
+                )
+                self._playwright_context = await self._browser.new_context(
+                    viewport={'width': 1080, 'height': 1920},
+                    device_scale_factor=2.0,
+                )
+                logger.debug("Playwright browser initialized")
+            except asyncio.TimeoutError:
+                logger.error("Playwright browser launch timed out (30s)")
+                await self._close_playwright()
+                raise RuntimeError("Playwright launch timeout")
+            except Exception as e:
+                logger.error(f"Playwright initialization failed: {e}")
+                await self._close_playwright()
+                raise
     
     async def _close_playwright(self):
         """Close Playwright browser if open."""

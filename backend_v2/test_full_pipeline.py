@@ -20,6 +20,10 @@ async def test_full_pipeline():
     
     logger.info("Starting FULL PIPELINE test for a single video...")
     
+    # Force Edge TTS for cost-efficient testing
+    settings.TTS_ENGINE = "edge"
+    settings.ENABLE_CACHE = True
+    
     # Initialize the pipeline with settings for a single cycle, no upload
     pipeline = AutoPipeline(
         # Use a broader list of subreddits to ensure we find stories

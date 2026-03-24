@@ -309,9 +309,29 @@ class AutoPipeline:
 
     async def run_single_cycle(self):
         stories = await self.fetch_stories()
+        results = {
+            'stories_processed': 0,
+            'stories_successful': 0,
+            'processed_stories': [],
+            'errors': []
+        }
+        
         for i, story in enumerate(stories, 1):
-            await self.process_story_with_retry(story)
-            if i < len(stories): await asyncio.sleep(5)
+            success = await self.process_story_with_retry(story)
+            results['stories_processed'] += 1
+            if success:
+                results['stories_successful'] += 1
+            
+            results['processed_stories'].append({
+                'id': story.id,
+                'title': story.title,
+                'success': success
+            })
+            
+            if i < len(stories):
+                await asyncio.sleep(5)
+        
+        return results
 
     async def run_continuous(self, interval_minutes=60, max_cycles=None, stop_on_quota_exceeded=True):
         self.is_running = True

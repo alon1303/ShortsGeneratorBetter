@@ -176,7 +176,13 @@ class BackgroundManager:
                 str(video_path)
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            # Use encoding='utf-8' to prevent UnicodeDecodeError on Windows
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
+            
+            if not result.stdout.strip():
+                logger.error(f"ffprobe returned empty output for {video_path}")
+                raise ValueError("Empty ffprobe output")
+
             data = json.loads(result.stdout)
 
             metadata = {
@@ -300,37 +306,63 @@ class BackgroundManager:
             x_offset = max(0, (original_width - crop_width) // 2)
             y_offset = max(0, (original_height - crop_height) // 2)
 
-            # Build FFmpeg command with strict encoding parameters
-            # Force SAR 1:1 to ensure all clips are consistent for concatenation
-            filter_complex = (
-                f'[0:v]crop={crop_width}:{crop_height}:{x_offset}:{y_offset},'
-                f'scale={target_width}:{target_height},'
-                f'setsar=1,'
-                f'fps=fps={force_fps}[v]'
+            # Check if video is already optimized (1080x1920, 30FPS, SAR 1:1)
+            # We can use stream copy if dimensions, FPS, and pixel format match
+            is_already_optimized = (
+                original_width == target_width and 
+                original_height == target_height and 
+                abs(metadata.get('fps', 0) - force_fps) < 0.1
             )
             
-            cmd = [
-                'ffmpeg',
-                '-y',
-                '-ss', str(start_time),
-                '-i', str(video_path),
-                '-t', str(duration),
-                '-filter_complex', filter_complex,
-                '-map', '[v]',
-                '-map', '0:a?',
-                '-c:v', 'libx264',
-                '-preset', 'veryfast',
-                '-crf', '23',
-                '-pix_fmt', force_pixel_format,
-                '-r', str(force_fps),  # Ensure output frame rate matches target
-                '-c:a', 'aac',
-                '-b:a', '128k',
-                '-movflags', '+faststart',
-                str(output_path)
-            ]
+            # Additional check for SAR 1:1 if available in metadata
+            # (ffprobe might not always show it clearly, but we assume it if it's our optimized format)
+
+            if is_already_optimized:
+                logger.info(f"Background video {video_path.name} is already optimized. Using stream copy.")
+                cmd = [
+                    'ffmpeg',
+                    '-y',
+                    '-ss', str(start_time),
+                    '-i', str(video_path),
+                    '-t', str(duration),
+                    '-c:v', 'copy',
+                    '-c:a', 'copy',
+                    '-movflags', '+faststart',
+                    str(output_path)
+                ]
+            else:
+                # Build FFmpeg command with strict encoding parameters
+                # Force SAR 1:1 to ensure all clips are consistent for concatenation
+                filter_complex = (
+                    f'[0:v]crop={crop_width}:{crop_height}:{x_offset}:{y_offset},'
+                    f'scale={target_width}:{target_height},'
+                    f'setsar=1,'
+                    f'fps=fps={force_fps}[v]'
+                )
+                
+                cmd = [
+                    'ffmpeg',
+                    '-y',
+                    '-ss', str(start_time),
+                    '-i', str(video_path),
+                    '-t', str(duration),
+                    '-filter_complex', filter_complex,
+                    '-map', '[v]',
+                    '-map', '0:a?',
+                    '-c:v', 'libx264',
+                    '-preset', 'veryfast',
+                    '-crf', '23',
+                    '-pix_fmt', force_pixel_format,
+                    '-r', str(force_fps),  # Ensure output frame rate matches target
+                    '-c:a', 'aac',
+                    '-b:a', '128k',
+                    '-movflags', '+faststart',
+                    str(output_path)
+                ]
 
             logger.debug(f"Extracting clip with strict encoding: FPS={force_fps}, pixel_format={force_pixel_format}")
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            # Use encoding='utf-8' to prevent UnicodeDecodeError on Windows
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
 
             if result.returncode != 0:
                 logger.error(f"FFmpeg failed with error: {result.stderr}")
@@ -376,7 +408,8 @@ class BackgroundManager:
                 str(temp_path)
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            # Use encoding='utf-8' to prevent UnicodeDecodeError on Windows
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
             if result.returncode != 0:
                 logger.error(f"Re-encoding failed: {result.stderr}")
                 return False
@@ -698,7 +731,8 @@ class BackgroundManager:
             ]
             
             logger.debug(f"Concatenation command: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            # Use encoding='utf-8' to prevent UnicodeDecodeError on Windows
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
             
             if result.returncode != 0:
                 logger.error(f"FFmpeg concatenation failed: {result.stderr}")
@@ -742,7 +776,8 @@ class BackgroundManager:
             str(output_path)
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        # Use encoding='utf-8' to prevent UnicodeDecodeError on Windows
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
         
         if result.returncode != 0:
             logger.error(f"Fallback concatenation also failed: {result.stderr}")
