@@ -101,6 +101,8 @@ class Settings(BaseSettings):
     
     # --- AUDIO PROCESSING (JUMP CUTS) ---
     REMOVE_SILENCES: bool = True
+    REMOVE_SILENCES_EDGE: bool = True  # Edge TTS often has unnatural pauses
+    REMOVE_SILENCES_ELEVENLABS: bool = False  # ElevenLabs has natural pacing
     SILENCE_THRESHOLD_DB: float = -40.0
     MIN_SILENCE_DURATION_MS: int = 400
     KEEP_SILENCE_MS: int = 100

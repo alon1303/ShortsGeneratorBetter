@@ -118,7 +118,7 @@ class EdgeTTSClient:
             Path to cached audio file if exists, None otherwise
         """
         # Look for files with this cache key
-        pattern = f"{cache_key}_*.mp3"
+        pattern = f"{cache_key}_*.wav"
         cached_files = list(self.voices_dir.glob(pattern))
         
         if cached_files:
@@ -150,7 +150,7 @@ class EdgeTTSClient:
         """
         # Generate filename with timestamp
         timestamp = int(time.time())
-        filename = f"{cache_key}_{timestamp}.mp3"
+        filename = f"{cache_key}_{timestamp}.wav"
         filepath = self.voices_dir / filename
         
         # Save audio file
@@ -541,7 +541,7 @@ class EdgeTTSClient:
         current_time = time.time()
         max_age_seconds = max_age_hours * 3600
         
-        for filepath in self.voices_dir.glob("*.mp3"):
+        for filepath in self.voices_dir.glob("*.wav"):
             try:
                 file_age = current_time - filepath.stat().st_mtime
                 

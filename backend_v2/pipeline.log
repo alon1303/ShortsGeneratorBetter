@@ -431,3 +431,56 @@ Received > 3 system signals, hard exiting
     raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
 AttributeError: 'AudioWithTimestampsResponse' object has no attribute 'audio'
 
+2026-03-26 11:13:34,960 - INFO - Starting Main Pipeline for URL: https://www.reddit.com/r/AmITheJerk/comments/1s2d89d/aitj_for_refusing_to_pay_for_my_friends_meal/ (Engine: elevenlabs)
+2026-03-26 11:13:34,960 - INFO - Loaded 6 processed post IDs from C:\Projects\ShortsGeneratorBetter\backend_v2\data\processed_posts.json
+2026-03-26 11:13:34,960 - INFO - Reddit HTTP client initialized (user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...)
+2026-03-26 11:13:34,960 - INFO - Processed posts tracking enabled: 6 posts in history
+2026-03-26 11:13:34,967 - INFO - Fetching story by ID: 1s2d89d
+2026-03-26 11:13:35,720 - INFO - HTTP Request: GET https://www.reddit.com/by_id/t3_1s2d89d.json "HTTP/1.1 200 OK"
+2026-03-26 11:13:35,754 - INFO - Fetched story by ID: AITJ for refusing to pay for my friend's meal afte...
+2026-03-26 11:13:35,754 - INFO - Fetched story: 'AITJ for refusing to pay for my friend's meal after she ordered the most expensive thing on the menu?' by Ill-Detail5299
+2026-03-26 11:13:35,759 - INFO - StoryProcessor initialized: 30-60s parts. AI available: True
+2026-03-26 11:13:35,759 - INFO - Processing story: 'AITJ for refusing to pay for my friend's meal afte...'
+2026-03-26 11:13:40,355 - INFO - AI Analysis: 1 parts detected.
+2026-03-26 11:13:40,359 - INFO - Gender: F, Age: None
+2026-03-26 11:13:40,359 - INFO - Extracting high-impact keywords for title card...
+2026-03-26 11:13:46,893 - INFO - Gemini extracted keywords for 'AITJ for refusing to pay for m...': ['REFUSING', 'PAY', 'EXPENSIVE', 'FRIEND']
+2026-03-26 11:13:46,930 - INFO - Jinja2 environment initialized with template directory: C:\Projects\ShortsGeneratorBetter\backend_v2\templates
+2026-03-26 11:13:46,930 - INFO - RedditImageGenerator initialized with output directory: C:\Users\alon8\AppData\Local\Temp\reddit_overlays
+2026-03-26 11:14:04,305 - INFO - Title card generated at: C:\Projects\ShortsGeneratorBetter\backend_v2\outputs\AITJ_for_refusing_to_pay_for_my_friend's_meal_afte\title_card.png
+2026-03-26 11:14:04,305 - INFO - Generating narration and calculating word timestamps...
+2026-03-26 11:14:04,305 - INFO - TTSRouter initialized with engine: elevenlabs
+2026-03-26 11:14:04,308 - WARNING - Overriding Edge TTS voice 'en-US-ChristopherNeural' with ElevenLabs default for ElevenLabs engine
+2026-03-26 11:14:04,513 - INFO - ElevenLabs client initialized: voice=pNInz6obpgDQGcFmaJgB, model=eleven_multilingual_v2
+2026-03-26 11:14:04,513 - INFO - Using ElevenLabs female voice: yj30vwTGJxSHezdAGsv9
+2026-03-26 11:14:04,513 - INFO - TTSRouter: engine=elevenlabs, requested_voice=yj30vwTGJxSHezdAGsv9, gender=F
+2026-03-26 11:14:04,513 - INFO - Generating ElevenLabs TTS for 101 chars
+2026-03-26 11:14:06,227 - INFO - HTTP Request: POST https://api.elevenlabs.io/v1/text-to-speech/yj30vwTGJxSHezdAGsv9/with-timestamps?output_format=mp3_44100_128 "HTTP/1.1 200 OK"
+2026-03-26 11:14:06,296 - INFO - Response type: <class 'elevenlabs.types.audio_with_timestamps_response.AudioWithTimestampsResponse'>
+2026-03-26 11:14:06,705 - INFO - Generating ElevenLabs TTS for 1362 chars
+2026-03-26 11:14:06,787 - INFO - HTTP Request: POST https://api.elevenlabs.io/v1/text-to-speech/yj30vwTGJxSHezdAGsv9/with-timestamps?output_format=mp3_44100_128 "HTTP/1.1 401 Unauthorized"
+2026-03-26 11:14:06,787 - ERROR - ElevenLabs TTS failed: headers: {'date': 'Thu, 26 Mar 2026 09:14:07 GMT', 'server': 'uvicorn', 'content-length': '190', 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST, PATCH, OPTIONS, DELETE, GET, PUT', 'access-control-max-age': '600', 'strict-transport-security': 'max-age=1800;', 'x-trace-id': '362466ed286706f78911ac0b3ee99350', 'x-region': 'europe-west4', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000'}, status_code: 401, body: {'detail': {'status': 'quota_exceeded', 'message': 'This request exceeds your API key (CLINE) quota of 30000. You have 841 credits remaining, while 1365 credits are required for this request.'}}
+2026-03-26 11:14:06,787 - ERROR - Pipeline failed: headers: {'date': 'Thu, 26 Mar 2026 09:14:07 GMT', 'server': 'uvicorn', 'content-length': '190', 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST, PATCH, OPTIONS, DELETE, GET, PUT', 'access-control-max-age': '600', 'strict-transport-security': 'max-age=1800;', 'x-trace-id': '362466ed286706f78911ac0b3ee99350', 'x-region': 'europe-west4', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000'}, status_code: 401, body: {'detail': {'status': 'quota_exceeded', 'message': 'This request exceeds your API key (CLINE) quota of 30000. You have 841 credits remaining, while 1365 credits are required for this request.'}}
+2026-03-26 11:14:06,822 - ERROR - Traceback (most recent call last):
+  File "C:\Projects\ShortsGeneratorBetter\backend_v2\main_pipeline_one_vid.py", line 95, in main_pipeline
+    title_audio_path, audio_chunks, subtitle_start_time, timing_data = await generate_title_and_story_audio(
+                                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Projects\ShortsGeneratorBetter\backend_v2\reddit_story\tts_router.py", line 180, in generate_title_and_story_audio
+    story_audio_chunks = await router.generate_audio_chunks(
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Projects\ShortsGeneratorBetter\backend_v2\reddit_story\tts_router.py", line 141, in generate_audio_chunks
+    return await client.generate_audio_chunks(text_chunks=text_chunks, voice=voice, with_timestamps=with_timestamps, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Projects\ShortsGeneratorBetter\backend_v2\reddit_story\elevenlabs_client.py", line 233, in generate_audio_chunks
+    path, duration, word_timestamps = await self.text_to_speech_with_timestamps(text, voice, **kwargs)
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Projects\ShortsGeneratorBetter\backend_v2\reddit_story\elevenlabs_client.py", line 121, in text_to_speech_with_timestamps
+    response = self.client.text_to_speech.convert_with_timestamps(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\alon8\AppData\Local\Programs\Python\Python312\Lib\site-packages\elevenlabs\text_to_speech\client.py", line 289, in convert_with_timestamps
+    _response = self._raw_client.convert_with_timestamps(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\alon8\AppData\Local\Programs\Python\Python312\Lib\site-packages\elevenlabs\text_to_speech\raw_client.py", line 360, in convert_with_timestamps
+    raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+elevenlabs.core.api_error.ApiError: headers: {'date': 'Thu, 26 Mar 2026 09:14:07 GMT', 'server': 'uvicorn', 'content-length': '190', 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST, PATCH, OPTIONS, DELETE, GET, PUT', 'access-control-max-age': '600', 'strict-transport-security': 'max-age=1800;', 'x-trace-id': '362466ed286706f78911ac0b3ee99350', 'x-region': 'europe-west4', 'via': '1.1 google', 'alt-svc': 'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000'}, status_code: 401, body: {'detail': {'status': 'quota_exceeded', 'message': 'This request exceeds your API key (CLINE) quota of 30000. You have 841 credits remaining, while 1365 credits are required for this request.'}}
+

@@ -226,10 +226,10 @@ def remove_silences(
         if output_path is None:
             temp_dir = Path(tempfile.gettempdir()) / "shorts_audio_cleanup"
             temp_dir.mkdir(parents=True, exist_ok=True)
-            output_path = temp_dir / f"cleaned_{int(time.time())}_{audio_path.name}"
+            output_path = temp_dir / f"cleaned_{int(time.time())}_{audio_path.stem}.wav"
 
         try:
-            new_audio.export(str(output_path), format="mp3", bitrate="128k")
+            new_audio.export(str(output_path), format="wav")
             orig_dur = len(audio)/1000.0
             new_dur = len(new_audio)/1000.0
             saved = orig_dur - new_dur
@@ -250,25 +250,62 @@ def remove_silences(
 def map_timestamp_to_new_time(original_time: float, timing_map: List[Dict[str, float]]) -> float:
     """
     Map an original timestamp to the new timestamp after silence removal.
+    Improved to handle gaps robustly and ensure monotonic mapping.
+    
+    Args:
+        original_time: Time in original audio (seconds)
+        timing_map: List of dicts with keys: original_start, original_end, new_start, duration
+    
+    Returns:
+        Mapped time in cleaned audio (seconds)
     """
     if not timing_map:
         return original_time
+    
+    # Binary search for the appropriate chunk
+    lo, hi = 0, len(timing_map) - 1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        entry = timing_map[mid]
         
-    for entry in timing_map:
-        if entry["original_start"] <= original_time <= entry["original_end"]:
-            # Time is within a kept chunk
+        if original_time < entry["original_start"]:
+            hi = mid - 1
+        elif original_time > entry["original_end"]:
+            lo = mid + 1
+        else:
+            # Within this kept chunk
             offset = original_time - entry["original_start"]
             return entry["new_start"] + offset
-        elif original_time < entry["original_start"]:
-            # Time is before this chunk (must have been in a deleted silent part or previous chunk)
-            # If we are here, and it wasn't in the previous chunk, it's in a gap.
-            # We map it to the start of the current chunk.
-            return entry["new_start"]
-            
-    # If it's after the last chunk
-    if timing_map:
+    
+    # original_time is not inside any kept chunk; it's in a gap
+    # Determine whether it's before the first chunk or between chunks
+    if original_time < timing_map[0]["original_start"]:
+        # Before first chunk: map to start of first chunk
+        return timing_map[0]["new_start"]
+    
+    # After last chunk: map to end of last chunk
+    if original_time > timing_map[-1]["original_end"]:
         return timing_map[-1]["new_start"] + timing_map[-1]["duration"]
-        
+    
+    # Between two chunks: find the gap it falls into
+    for i in range(len(timing_map) - 1):
+        if timing_map[i]["original_end"] < original_time < timing_map[i + 1]["original_start"]:
+            # In the gap between chunk i and i+1
+            # Map to the end of chunk i (or start of chunk i+1?)
+            # Choose the nearest edge to avoid large jumps.
+            gap_start = timing_map[i]["original_end"]
+            gap_end = timing_map[i + 1]["original_start"]
+            # Determine which edge is closer
+            dist_to_start = original_time - gap_start
+            dist_to_end = gap_end - original_time
+            if dist_to_start <= dist_to_end:
+                # Closer to start of gap (end of previous chunk)
+                return timing_map[i]["new_start"] + timing_map[i]["duration"]
+            else:
+                # Closer to end of gap (start of next chunk)
+                return timing_map[i + 1]["new_start"]
+    
+    # Should not reach here
     return original_time
 
 # Test function

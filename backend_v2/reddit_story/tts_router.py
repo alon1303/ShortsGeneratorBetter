@@ -232,7 +232,7 @@ async def generate_title_and_story_audio(
             temp_path = Path(temp_dir)
             
             # Merge Title + First Story Chunk with silence gap
-            merged_first_audio_path = temp_path / f"merged_first_part_{uuid.uuid4().hex[:8]}.mp3"
+            merged_first_audio_path = temp_path / f"merged_first_part_{uuid.uuid4().hex[:8]}.wav"
             
             # Complex FFmpeg filter: adds a delay to the story audio, then concatenates
             cmd = [
@@ -241,7 +241,7 @@ async def generate_title_and_story_audio(
                 '-i', str(first_chunk.audio_path),
                 '-filter_complex', f'[1:a]adelay={delay_ms}|{delay_ms}[delayed_story];[0:a][delayed_story]concat=n=2:v=0:a=1[out]',
                 '-map', '[out]',
-                '-c:a', 'libmp3lame',
+                '-c:a', 'pcm_s16le',
                 str(merged_first_audio_path)
             ]
             subprocess.run(cmd, capture_output=True)

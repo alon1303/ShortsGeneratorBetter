@@ -36,38 +36,38 @@ async def cleanup_cache(max_age_hours: int = 24):
     print()
     
     # Count files before cleanup
-    mp3_files = list(voices_dir.glob("*.mp3"))
+    wav_files = list(voices_dir.glob("*.wav"))
     json_files = list(voices_dir.glob("*.json"))
     timestamp_files = list(voices_dir.glob("*.timestamps.json"))
     
     print(f"Files before cleanup:")
-    print(f"  - MP3 files: {len(mp3_files)}")
+    print(f"  - WAV files: {len(wav_files)}")
     print(f"  - JSON metadata files: {len(json_files)}")
     print(f"  - Timestamp files: {len(timestamp_files)}")
-    print(f"  - Total: {len(mp3_files) + len(json_files) + len(timestamp_files)}")
+    print(f"  - Total: {len(wav_files) + len(json_files) + len(timestamp_files)}")
     print()
     
     # Use client's cleanup method
     deleted_count = client.cleanup_old_cache(max_age_hours=max_age_hours)
     
     # Count files after cleanup
-    mp3_files_after = list(voices_dir.glob("*.mp3"))
+    wav_files_after = list(voices_dir.glob("*.wav"))
     json_files_after = list(voices_dir.glob("*.json"))
     timestamp_files_after = list(voices_dir.glob("*.timestamps.json"))
     
     print(f"Files after cleanup:")
-    print(f"  - MP3 files: {len(mp3_files_after)}")
+    print(f"  - WAV files: {len(wav_files_after)}")
     print(f"  - JSON metadata files: {len(json_files_after)}")
     print(f"  - Timestamp files: {len(timestamp_files_after)}")
-    print(f"  - Total: {len(mp3_files_after) + len(json_files_after) + len(timestamp_files_after)}")
+    print(f"  - Total: {len(wav_files_after) + len(json_files_after) + len(timestamp_files_after)}")
     print()
     
     print(f"✓ Cleaned up {deleted_count} old cache files")
     
     # Show remaining file ages
-    if mp3_files_after:
+    if wav_files_after:
         print("\nRemaining cache files (newest first):")
-        sorted_files = sorted(mp3_files_after, key=lambda p: p.stat().st_mtime, reverse=True)
+        sorted_files = sorted(wav_files_after, key=lambda p: p.stat().st_mtime, reverse=True)
         for i, filepath in enumerate(sorted_files[:5]):  # Show top 5
             file_age_hours = (datetime.now().timestamp() - filepath.stat().st_mtime) / 3600
             file_size_kb = filepath.stat().st_size / 1024
@@ -123,8 +123,8 @@ if __name__ == "__main__":
         # Just show info
         cache_dir = Path("cache/edgetts/voices")
         if cache_dir.exists():
-            mp3_files = list(cache_dir.glob("*.mp3"))
-            print(f"Total MP3 files: {len(mp3_files)}")
+            wav_files = list(cache_dir.glob("*.wav"))
+            print(f"Total WAV files: {len(wav_files)}")
             
             # Group by age
             now = datetime.now().timestamp()
@@ -135,7 +135,7 @@ if __name__ == "__main__":
                 "30+ days": 0,
             }
             
-            for filepath in mp3_files:
+            for filepath in wav_files:
                 file_age_days = (now - filepath.stat().st_mtime) / (3600 * 24)
                 if file_age_days < 1:
                     age_groups["0-1 day"] += 1

@@ -84,7 +84,7 @@ class ElevenLabsClient:
         cache_key = self._generate_cache_key(text, voice_id)
         
         if use_cache:
-            pattern = f"{cache_key}_*.mp3"
+            pattern = f"{cache_key}_*.wav"
             cached_files = list(self.voices_dir.glob(pattern))
             if cached_files:
                 cached_path = sorted(cached_files)[-1]
@@ -149,7 +149,7 @@ class ElevenLabsClient:
             word_timestamps = self._aggregate_characters_to_words(alignment)
             
             timestamp = int(time.time())
-            file_path = self.voices_dir / f"{cache_key}_{timestamp}.mp3"
+            file_path = self.voices_dir / f"{cache_key}_{timestamp}.wav"
             json_path = self.voices_dir / f"{cache_key}_{timestamp}.json"
             
             with open(file_path, "wb") as f:

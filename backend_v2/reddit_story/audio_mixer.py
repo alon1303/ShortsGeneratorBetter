@@ -121,12 +121,12 @@ class AudioMixer:
                     f"{main_audio_path}{pop_sfx_path}{pop_start_time}".encode()
                 ).hexdigest()[:8]
                 timestamp = int(time.time())
-                filename = f"mixed_audio_{content_hash}_{timestamp}.mp3"
+                filename = f"mixed_audio_{content_hash}_{timestamp}.wav"
                 output_path = self.output_dir / filename
             
             # Export mixed audio
             try:
-                mixed_audio.export(str(output_path), format="mp3", bitrate="128k")
+                mixed_audio.export(str(output_path), format="wav")
             except Exception as e:
                 logger.error(f"Failed to export mixed title/pop audio: {e}")
                 return None
@@ -193,10 +193,10 @@ class AudioMixer:
             if output_path is None:
                 import time, hashlib
                 content_hash = hashlib.md5(f"{main_audio_path}{bg_music_path}".encode()).hexdigest()[:8]
-                output_path = self.output_dir / f"with_bgm_{content_hash}_{int(time.time())}.mp3"
+                output_path = self.output_dir / f"with_bgm_{content_hash}_{int(time.time())}.wav"
                 
             try:
-                mixed_audio.export(str(output_path), format="mp3", bitrate="128k")
+                mixed_audio.export(str(output_path), format="wav")
                 return output_path
             except Exception as e:
                 logger.error(f"Failed to export audio with background music: {e}")
@@ -235,11 +235,11 @@ class AudioMixer:
                     f"{audio_path}{fade_in_duration}{fade_out_duration}".encode()
                 ).hexdigest()[:8]
                 timestamp = int(time.time())
-                filename = f"faded_audio_{content_hash}_{timestamp}.mp3"
+                filename = f"faded_audio_{content_hash}_{timestamp}.wav"
                 output_path = self.output_dir / filename
             
             try:
-                faded.export(str(output_path), format="mp3", bitrate="128k")
+                faded.export(str(output_path), format="wav")
             except Exception as e:
                 logger.error(f"Failed to export faded audio: {e}")
                 return None
@@ -281,11 +281,11 @@ class AudioMixer:
                 import time
                 content_hash = hashlib.md5(f"{audio_path}{target_db}".encode()).hexdigest()[:8]
                 timestamp = int(time.time())
-                filename = f"normalized_audio_{content_hash}_{timestamp}.mp3"
+                filename = f"normalized_audio_{content_hash}_{timestamp}.wav"
                 output_path = self.output_dir / filename
             
             try:
-                normalized.export(str(output_path), format="mp3", bitrate="128k")
+                normalized.export(str(output_path), format="wav")
             except Exception as e:
                 logger.error(f"Failed to export normalized audio: {e}")
                 return None
@@ -353,11 +353,11 @@ class AudioMixer:
                 path_str = "".join(str(p) for p in audio_paths)
                 content_hash = hashlib.md5(path_str.encode()).hexdigest()[:8]
                 timestamp = int(time.time())
-                filename = f"concatenated_audio_{content_hash}_{timestamp}.mp3"
+                filename = f"concatenated_audio_{content_hash}_{timestamp}.wav"
                 output_path = self.output_dir / filename
             
             try:
-                concatenated.export(str(output_path), format="mp3", bitrate="128k")
+                concatenated.export(str(output_path), format="wav")
             except Exception as e:
                 logger.error(f"Failed to export concatenated audio: {e}")
                 return None

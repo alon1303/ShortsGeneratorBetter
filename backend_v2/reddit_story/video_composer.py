@@ -145,8 +145,8 @@ class VideoComposer:
             cur_audio = audio_path.name
             if pop_sfx_path and pop_sfx_path.exists():
                 shutil.copy2(pop_sfx_path, temp_dir / pop_sfx_path.name)
-                mixed = self.audio_mixer.mix_title_with_pop_sfx(temp_dir / audio_path.name, temp_dir / pop_sfx_path.name, output_path=temp_dir / "mixed.mp3")
-                if mixed: cur_audio = "mixed.mp3"
+                mixed = self.audio_mixer.mix_title_with_pop_sfx(temp_dir / audio_path.name, temp_dir / pop_sfx_path.name, output_path=temp_dir / "mixed.wav")
+                if mixed: cur_audio = "mixed.wav"
 
             cmd = ['ffmpeg', '-y', '-i', background_path.name]
             if overlay_name: cmd.extend(['-loop', '1', '-framerate', '30', '-i', overlay_name])
