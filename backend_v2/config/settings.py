@@ -18,19 +18,28 @@ class Settings(BaseSettings):
     """
     Application settings with environment variable support.
     Uses pydantic for validation and type conversion.
+    
+    IMPORTANT: Secrets (API Keys) should stay in .env.
+    All other configurations should be defined here.
     """
     
-    # Application
+    # --- SECRETS (Must stay in .env) ---
+    ELEVENLABS_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
+    YOUTUBE_CLIENT_ID: Optional[str] = None
+    YOUTUBE_CLIENT_SECRET: Optional[str] = None
+
+    # --- APPLICATION ---
     APP_NAME: str = "ShortsGenerator Backend v2"
     APP_VERSION: str = "2.0.0"
     DEBUG: bool = False
     
-    # Server
+    # --- SERVER ---
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     WORKERS: int = 1
     
-    # File paths
+    # --- DIRECTORIES ---
     BASE_DIR: Path = Path(__file__).parent.parent
     UPLOAD_DIR: Path = BASE_DIR / "uploads"
     OUTPUT_DIR: Path = BASE_DIR / "outputs"
@@ -40,52 +49,45 @@ class Settings(BaseSettings):
     BACKGROUNDS_DIR: Path = ASSETS_DIR / "backgrounds"
     DEFAULT_BGM_PATH: Path = ASSETS_DIR / "audio" / "lofi_bg.mp3"
     
-    # File upload settings
-    MAX_FILE_SIZE_MB: int = 100
-    ALLOWED_EXTENSIONS: Union[str, List[str]] = [".mp4", ".avi", ".mkv", ".mov", ".webm"]
-    
-    # Reddit Settings (using public JSON endpoints - no API keys required)
+    # --- REDDIT ---
     REDDIT_USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    
-    # Reddit story settings
     DEFAULT_SUBREDDIT: str = "AskReddit"
     DEFAULT_TIME_FILTER: str = "day"  # hour, day, week, month, year, all
     MIN_STORY_SCORE: int = 100
     MIN_STORY_LENGTH: int = 200  # characters
     MAX_STORY_LENGTH: int = 5000  # characters
     EXCLUDE_NSFW: bool = True
-    WORDS_PER_MINUTE: int = 180  # Narration speed
     
-    # ElevenLabs API Settings (for Phase 2)
-    ELEVENLABS_API_KEY: Optional[str] = None
-    ELEVENLABS_VOICE_RACHEL: str = "21m00Tcm4TlvDq8ikWAM"
-    ELEVENLABS_VOICE_ADAM: str = "pNInz6obpgDQGcFmaJgB"
-    ELEVENLABS_VOICE_ELLI: str = "MF3mGyEYCl7XYWbV9V6O"
-    ELEVENLABS_VOICE_JOSH: str = "TxGEqnHWrfWFTfGW9XjX"
+    # --- TTS & VOICES ---
+    TTS_ENGINE: str = "edge" # "edge" or "elevenlabs"
     
-    # Gemini settings for keyword extraction (optional)
-    GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-flash-latest"
-    
-    # Edge TTS Voices (for TTS_ENGINE = "edge")
+    # Edge TTS Voices
     EDGE_TTS_VOICE_FEMALE: str = "en-US-JennyNeural"
     EDGE_TTS_VOICE_MALE: str = "en-US-ChristopherNeural"
+    EDGE_TTS_VOICE_ARIA: str = "en-US-AriaNeural"
     
-    DEFAULT_VOICE_ID: str = EDGE_TTS_VOICE_MALE
+    # ElevenLabs Voice IDs
+    ELEVEN_VOICE_RACHEL: str = "21m00Tcm4TlvDq8ikWAM"
+    ELEVEN_VOICE_ADAM: str = "pNInz6obpgDQGcFmaJgB"
+    ELEVEN_VOICE_ELLI: str = "MF3mGyEYCl7XYWbV9V6O"
+    ELEVEN_VOICE_JOSH: str = "TxGEqnHWrfWFTfGW9XjX"
+
+    DEFAULT_VOICE_ID: str = "en-US-ChristopherNeural"
     
-    EDGE_TTS_ALIASES: Dict[str, str] = Field(
-        default_factory=lambda: {
-            "female": "en-US-JennyNeural",
-            "male": "en-US-ChristopherNeural", 
-            "aria": "en-US-AriaNeural",
-            "christopher": "en-US-ChristopherNeural",
-            "default": "en-US-JennyNeural",
-        }
-    )
+    # Voice Aliases for easy switching
+    VOICE_ALIASES: Dict[str, str] = {
+        "female": "en-US-JennyNeural",
+        "male": "en-US-ChristopherNeural", 
+        "aria": "en-US-AriaNeural",
+        "christopher": "en-US-ChristopherNeural",
+        "rachel": "21m00Tcm4TlvDq8ikWAM",
+        "adam": "pNInz6obpgDQGcFmaJgB",
+        "elli": "MF3mGyEYCl7XYWbV9V6O",
+        "josh": "TxGEqnHWrfWFTfGW9XjX",
+        "default": "en-US-ChristopherNeural"
+    }
     
-    TTS_ENGINE: str = "edge"
-    
-    # Background video settings
+    # --- BACKGROUND VIDEO ---
     DEFAULT_BACKGROUND_THEME: str = "minecraft"
     BACKGROUND_THEMES: List[str] = ["abstract", "food", "gta", "lofi", "minecraft", "nature", "oddly satisfying", "subway surfer"]
     MIN_BACKGROUND_DURATION: int = 60
@@ -97,33 +99,41 @@ class Settings(BaseSettings):
     BACKGROUND_DYNAMIC_SWITCHING: bool = True
     BGM_VOLUME_DELTA: float = -10.0
     
-    # Audio processing / Jump Cuts
+    # --- AUDIO PROCESSING (JUMP CUTS) ---
     REMOVE_SILENCES: bool = True
     SILENCE_THRESHOLD_DB: float = -40.0
     MIN_SILENCE_DURATION_MS: int = 400
     KEEP_SILENCE_MS: int = 100
     
-    # Video processing
+    # --- VIDEO OUTPUT ---
     TARGET_WIDTH: int = 1080
     TARGET_HEIGHT: int = 1920
     TARGET_FPS: int = 30
     VIDEO_CRF: int = 23
     VIDEO_PRESET: str = "veryfast"
     AUDIO_BITRATE: str = "128k"
-    FINAL_VIDEO_SPEED: float = 1.2
+    FINAL_VIDEO_SPEED: float = 1.0
+    ALLOWED_EXTENSIONS: List[str] = [".mp4", ".avi", ".mkv", ".mov", ".webm"]
+    MAX_FILE_SIZE_MB: int = 100
     
-    # Story segmentation
+    # --- STORY SEGMENTATION & AI ---
     MIN_PART_DURATION: int = 30
     MAX_PART_DURATION: int = 60
-    MAX_PARTS: int = 5
-    
-    # AI Story Splitting
     STORY_AI_SPLIT_THRESHOLD: float = 180.0
-    AI_MIN_PART_DURATION: int = 50
-    AI_WORDS_PER_MINUTE: int = 150
+    AI_MIN_PART_DURATION: int = 50 # This will be our enforced minimum part duration for AI splits
     
-    # Caching
-    CACHE_TTL: int = 3600
+    # ElevenLabs Voice Settings
+    ELEVENLABS_STABILITY: float = 0.5
+    ELEVENLABS_SIMILARITY_BOOST: float = 0.75
+    ELEVENLABS_STYLE: float = 0.0
+    ELEVENLABS_USE_SPEAKER_BOOST: bool = True
+    
+    # Note: ElevenLabs API officially supports speed between 0.7 and 1.2
+    ELEVENLABS_SPEED: float = 1.2
+    
+    GEMINI_MODEL: str = "gemini-flash-latest"
+    
+    # --- CACHING ---
     ENABLE_CACHE: bool = True
     
     class Config:
@@ -154,7 +164,7 @@ class Settings(BaseSettings):
         v.mkdir(parents=True, exist_ok=True)
         return v
     
-    def is_reddit_configured(self) -> bool: return True
+    @property
     def is_elevenlabs_configured(self) -> bool: return bool(self.ELEVENLABS_API_KEY)
     
     @property
@@ -162,20 +172,25 @@ class Settings(BaseSettings):
         return bool(self.GEMINI_API_KEY)
     
     def get_voice_id(self, voice_name: Optional[str] = None, engine: Optional[str] = None) -> str:
-        engine = engine or self.TTS_ENGINE.lower()
-        if engine == "edge":
-            if voice_name:
-                voice_lower = voice_name.lower()
-                if voice_lower in self.EDGE_TTS_ALIASES: return self.EDGE_TTS_ALIASES[voice_lower]
-                elif "neural" in voice_lower or "en-" in voice_lower: return voice_name
-            return self.DEFAULT_VOICE_ID
-        elif engine == "elevenlabs":
-            evm = {"rachel": self.ELEVENLABS_VOICE_RACHEL, "adam": self.ELEVENLABS_VOICE_ADAM, "elli": self.ELEVENLABS_VOICE_ELLI, "josh": self.ELEVENLABS_VOICE_JOSH}
-            if voice_name:
-                voice_lower = voice_name.lower()
-                if voice_lower in evm: return evm[voice_lower]
-                if len(voice_name) == 20 and voice_name.isalnum(): return voice_name
-            return self.ELEVENLABS_VOICE_ADAM
+        """
+        Resolves a voice ID based on name or alias.
+        All voice logic is now centralized here based on Settings.
+        """
+        voice_name = voice_name or "default"
+        voice_lower = voice_name.lower()
+        
+        # 1. Check Aliases first
+        if voice_lower in self.VOICE_ALIASES:
+            return self.VOICE_ALIASES[voice_lower]
+        
+        # 2. Check if it's already a full ID (Edge or ElevenLabs)
+        if "neural" in voice_lower or "en-" in voice_lower: # Edge
+            return voice_name
+        
+        if len(voice_name) == 20 and voice_name.isalnum(): # ElevenLabs ID
+            return voice_name
+            
+        # 3. Fallback
         return self.DEFAULT_VOICE_ID
 
 settings = Settings()

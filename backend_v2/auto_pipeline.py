@@ -212,7 +212,7 @@ class AutoPipeline:
             processor = StoryProcessor(
                 min_part_duration=settings.MIN_PART_DURATION,
                 max_part_duration=settings.MAX_PART_DURATION,
-                max_parts=settings.MAX_PARTS,
+
             )
             processed_story = await processor.process_story(story, split_into_parts=True)
             

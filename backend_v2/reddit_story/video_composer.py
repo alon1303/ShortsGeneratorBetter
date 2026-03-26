@@ -219,6 +219,32 @@ class VideoComposer:
             if not self.combine_audio_with_background(audio_chunk.audio_path, bg, output_path, sub_path, overlay_image_path, pop_sfx_path=pop_sfx_path, bg_music_path=bg_music_path, timing_data=timing_data):
                 return None
         
+        # Apply final video speed if needed
+        final_speed = getattr(settings, 'FINAL_VIDEO_SPEED', 1.0)
+        if final_speed != 1.0:
+            logger.info(f"Applying final video speed: {final_speed}x to part")
+            temp_speed_path = output_path.with_name(f"temp_speed_{uuid.uuid4().hex}.mp4")
+            shutil.copy2(output_path, temp_speed_path)
+            
+            video_pts = 1.0 / final_speed
+            audio_tempo = final_speed
+            cmd = [
+                'ffmpeg', '-y', 
+                '-i', str(temp_speed_path), 
+                '-filter_complex', f'[0:v]setpts={video_pts}*PTS[v];[0:a]atempo={audio_tempo}[a]', 
+                '-map', '[v]', '-map', '[a]',
+                '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+                '-c:a', 'aac',
+                str(output_path)
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+            if result.returncode != 0:
+                logger.error(f"Failed to apply final video speed to part: {result.stderr}")
+                shutil.copy2(temp_speed_path, output_path)
+            
+            if temp_speed_path.exists():
+                temp_speed_path.unlink()
+                
         return output_path
 
     def create_complete_shorts_video(
@@ -238,13 +264,46 @@ class VideoComposer:
             vp = self.create_video_part(chunk, theme, overlay_image_path=overlay_image_path if i==1 else None, pop_sfx_path=pop_sfx_path if i==1 else None, bg_music_path=bg_music_path, timing_data=timing_data if i==1 else None, custom_keywords=custom_keywords)
             if vp: vps.append(vp)
         
-        if len(vps) == 1: shutil.copy2(vps[0], output_path)
+        final_speed = getattr(settings, 'FINAL_VIDEO_SPEED', 1.0)
+        
+        # Determine intermediate path if we need to apply speed
+        temp_combined_path = output_path
+        if final_speed != 1.0:
+            temp_combined_path = output_path.with_name(f"temp_combined_{uuid.uuid4().hex}.mp4")
+            
+        if len(vps) == 1: 
+            shutil.copy2(vps[0], temp_combined_path)
         else:
             with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
                 for p in vps: f.write(f"file '{str(p).replace('\\','/')}'\n")
                 fl = Path(f.name)
-            subprocess.run(['ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', str(fl), '-c', 'copy', str(output_path)], capture_output=True, text=True, encoding='utf-8')
+            subprocess.run(['ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', str(fl), '-c', 'copy', str(temp_combined_path)], capture_output=True, text=True, encoding='utf-8')
             fl.unlink()
+            
+        # Apply final video speed
+        if final_speed != 1.0:
+            logger.info(f"Applying final video speed: {final_speed}x")
+            video_pts = 1.0 / final_speed
+            audio_tempo = final_speed
+            cmd = [
+                'ffmpeg', '-y', 
+                '-i', str(temp_combined_path), 
+                '-filter_complex', f'[0:v]setpts={video_pts}*PTS[v];[0:a]atempo={audio_tempo}[a]', 
+                '-map', '[v]', '-map', '[a]',
+                '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+                '-c:a', 'aac',
+                str(output_path)
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+            if result.returncode != 0:
+                logger.error(f"Failed to apply final video speed: {result.stderr}")
+                # Fallback
+                shutil.copy2(temp_combined_path, output_path)
+            
+            # Cleanup temp combined
+            if temp_combined_path.exists():
+                temp_combined_path.unlink()
+                
         return output_path
 
 def create_shorts_video(audio_chunks, theme=None, output_path=None, overlay_image_path=None, pop_sfx_path=None, bg_music_path=None, timing_data=None, custom_keywords=None):

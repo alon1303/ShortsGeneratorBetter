@@ -230,7 +230,13 @@ def remove_silences(
 
         try:
             new_audio.export(str(output_path), format="mp3", bitrate="128k")
-            logger.info(f"Removed silences: {audio_path.name} -> {output_path.name}. Original: {len(audio)/1000.0:.2f}s, New: {len(new_audio)/1000.0:.2f}s")
+            orig_dur = len(audio)/1000.0
+            new_dur = len(new_audio)/1000.0
+            saved = orig_dur - new_dur
+            logger.info(f"✂️ SILENCE REMOVAL: {audio_path.name}")
+            logger.info(f"   - Original duration: {orig_dur:.2f}s")
+            logger.info(f"   - New duration: {new_dur:.2f}s")
+            logger.info(f"   - Time saved: {saved:.2f}s ({ (saved/orig_dur)*100:.1f}%)")
         except Exception as e:
             logger.error(f"Failed to export cleaned audio: {e}")
             return audio_path, []

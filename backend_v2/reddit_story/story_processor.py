@@ -85,24 +85,15 @@ class StoryProcessor:
         self,
         min_part_duration: Optional[int] = None,
         max_part_duration: Optional[int] = None,
-        words_per_minute: Optional[int] = None,
-        max_parts: Optional[int] = None,
     ):
         """
         Initialize story processor with configuration.
         """
         self.min_part_duration = min_part_duration or settings.MIN_PART_DURATION
         self.max_part_duration = max_part_duration or settings.MAX_PART_DURATION
-        self.words_per_minute = words_per_minute or settings.WORDS_PER_MINUTE
-        self.max_parts = max_parts or settings.MAX_PARTS
-        
-        # Calculate word limits based on duration targets
-        self.min_words_per_part = self._duration_to_words(self.min_part_duration)
-        self.max_words_per_part = self._duration_to_words(self.max_part_duration)
         
         # AI settings
         self.ai_min_part_duration = settings.AI_MIN_PART_DURATION
-        self.ai_words_per_minute = settings.AI_WORDS_PER_MINUTE
         self.ai_split_threshold = settings.STORY_AI_SPLIT_THRESHOLD
         
         # Gemini initialization
@@ -120,19 +111,16 @@ class StoryProcessor:
             
         logger.info(
             f"StoryProcessor initialized: "
-            f"{self.min_part_duration}-{self.max_part_duration}s parts, "
-            f"{self.words_per_minute} wpm, max {self.max_parts} parts. AI available: {self.ai_available}"
+            f"{self.min_part_duration}-{self.max_part_duration}s parts. AI available: {self.ai_available}"
         )
     
-    def _duration_to_words(self, duration_seconds: float) -> int:
-        """Convert duration in seconds to approximate word count."""
-        minutes = duration_seconds / 60
-        return int(minutes * self.words_per_minute)
-    
     def _words_to_duration(self, word_count: int) -> float:
-        """Convert word count to estimated duration in seconds."""
-        minutes = word_count / self.words_per_minute
-        return minutes * 60
+        """Estimate duration in seconds from word count using the fallback WPM."""
+        return (word_count / self._fallback_wpm) * 60
+
+    def _estimate_duration_from_words(self, word_count: int) -> float:
+        """Estimate duration in seconds from word count using the fallback WPM."""
+        return self._words_to_duration(word_count)
     
     def _split_into_sentences(self, text: str) -> List[str]:
         """Split text into sentences using regex."""
@@ -224,7 +212,7 @@ class StoryProcessor:
         parts = []
         for i, (segment, start_index) in enumerate(zip(segments, start_indices), 1):
             word_count = len(segment.split())
-            duration = self._words_to_duration(word_count)
+            duration = self._estimate_duration_from_words(word_count)
             part = StoryPart(
                 part_number=i,
                 text=segment,
@@ -261,7 +249,7 @@ class StoryProcessor:
         CRITICAL RULES:
         1. DO NOT modify, rewrite, or summarize the story text. Use the EXACT text provided.
         2. Identify logical split points based on HIGH-TENSION moments (Cliffhangers).
-        3. Each part MUST be at least {self.ai_min_part_duration} seconds long (approx {int(self.ai_min_part_duration * self.ai_words_per_minute / 60)} words).
+        3. Each part MUST be at least {self.ai_min_part_duration} seconds long. Use your best judgement to ensure each part takes at least {self.ai_min_part_duration} seconds to read aloud at a normal pace.
         4. Identify narrator's gender (M/F) and age.
         5. Extract 3-5 "Power Words" for each part.
         
@@ -385,7 +373,7 @@ class StoryProcessor:
             curr = (idx if idx != -1 else curr) + len(s)
         segments, start_indices = self._merge_small_segments(segments, start_indices)
         segments, start_indices = self._split_large_segments(segments, start_indices)
-        parts = self._create_story_parts(segments[:self.max_parts], start_indices[:self.max_parts])
+        parts = self._create_story_parts(segments, start_indices)
         return ProcessedStory(story, parts, len(parts), sum(p.estimated_duration for p in parts), strategy, detected_gender)
 
     def _enrich_parts(self, processed: ProcessedStory):
@@ -405,7 +393,7 @@ class StoryProcessor:
                 part.estimated_duration = self._words_to_duration(part.word_count)
 
     def validate_parts(self, processed_story: ProcessedStory) -> bool:
-        return all(p.estimated_duration >= 15 for p in processed_story.parts)
+        return all(p.estimated_duration >= settings.AI_MIN_PART_DURATION for p in processed_story.parts)
 
 async def process_story(story: RedditStory, strategy: SplitStrategy = SplitStrategy.HYBRID, **kwargs) -> ProcessedStory:
     return await StoryProcessor(**kwargs).process_story(story, strategy)

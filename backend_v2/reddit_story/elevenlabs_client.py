@@ -32,15 +32,17 @@ class ElevenLabsClient:
         
         # Ensure we don't use an Edge TTS voice ID (contains 'Neural' or 'en-') 
         # when initialized, as ElevenLabs will return a 400 error.
-        voice_id = voice
-        if voice_id and ("neural" in voice_id.lower() or "en-" in voice_id.lower()):
-            logger.warning(f"Invalid ElevenLabs voice ID detected: {voice_id}. Forcing default Adam voice.")
-            voice_id = settings.get_voice_id("adam", engine="elevenlabs")
-            
-        self.voice = voice_id or settings.get_voice_id("adam", engine="elevenlabs")
+        self.voice = voice or settings.get_voice_id("adam", engine="elevenlabs")
         self.model = model
         self.cache_dir = cache_dir or settings.CACHE_DIR / "elevenlabs"
         self.voices_dir = self.cache_dir / "voices"
+        
+        # ElevenLabs voice settings
+        self.stability = settings.ELEVENLABS_STABILITY
+        self.similarity_boost = settings.ELEVENLABS_SIMILARITY_BOOST
+        self.style = settings.ELEVENLABS_STYLE
+        self.use_speaker_boost = settings.ELEVENLABS_USE_SPEAKER_BOOST
+        self.speed = getattr(settings, "ELEVENLABS_SPEED", 1.0)
         
         self.voices_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"ElevenLabs client initialized: voice={self.voice}, model={self.model}")
@@ -99,28 +101,29 @@ class ElevenLabsClient:
                     except Exception as e:
                         logger.warning(f"Failed to load cached timestamps: {e}")
                 
-                # Apply silence removal even for cached files if enabled
-                if settings.REMOVE_SILENCES:
-                    cleaned_path, timing_map = remove_silences(cached_path)
-                    if timing_map:
-                        cached_path = cleaned_path
-                        duration = await self._estimate_duration(cached_path)
-                        if word_timestamps:
-                            for ts in word_timestamps:
-                                ts.start = map_timestamp_to_new_time(ts.start, timing_map)
-                                ts.end = map_timestamp_to_new_time(ts.end, timing_map)
-                
                 return cached_path, duration, word_timestamps
 
         try:
             logger.info(f"Generating ElevenLabs TTS for {len(text)} chars")
             
+            # Build voice settings dynamically
+            voice_settings = {
+                "stability": self.stability,
+                "similarity_boost": self.similarity_boost,
+                "style": self.style,
+                "use_speaker_boost": self.use_speaker_boost,
+            }
+
+            if self.speed != 1.0:
+                voice_settings["speed"] = self.speed
+
             # Use convert_with_timestamps to get character-level alignment
             response = self.client.text_to_speech.convert_with_timestamps(
                 text=text,
                 voice_id=voice_id,
                 model_id=self.model,
-                output_format="mp3_44100_128"
+                output_format="mp3_44100_128",
+                voice_settings=voice_settings
             )
             
             # Debug: log the attributes of response
@@ -155,16 +158,6 @@ class ElevenLabsClient:
             # Cache word timestamps
             with open(json_path, "w", encoding='utf-8') as f:
                 json.dump([w.to_dict() for w in word_timestamps], f, indent=2)
-                
-            # Apply silence removal after generation if enabled
-            if settings.REMOVE_SILENCES:
-                cleaned_path, timing_map = remove_silences(file_path)
-                if timing_map:
-                    file_path = cleaned_path
-                    if word_timestamps:
-                        for ts in word_timestamps:
-                            ts.start = map_timestamp_to_new_time(ts.start, timing_map)
-                            ts.end = map_timestamp_to_new_time(ts.end, timing_map)
 
             duration = await self._estimate_duration(file_path)
             return file_path, duration, word_timestamps
