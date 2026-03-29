@@ -108,7 +108,20 @@ async def mock_pipeline(output_dir_name: str = "test_mock_sync_fix"):
             estimated_duration=60.0
         )
         
-        # 2. Preparation (Image)
+        # 2. Extract Keywords using Gemini
+        ai_keywords = []
+        try:
+            # Import the keyword extractor
+            from reddit_story.keyword_extractor import keyword_extractor
+            logger.info("Extracting keywords using Gemini...")
+            ai_keywords = await keyword_extractor.extract_keywords(story.title)
+            logger.info(f"AI extracted keywords: {ai_keywords}")
+        except Exception as e:
+            logger.error(f"Failed to extract keywords with Gemini: {e}")
+            # Fallback to heuristic keywords
+            ai_keywords = ["POLICE", "STEALING", "CAT"]
+        
+        # 3. Preparation (Image)
         image_gen = RedditImageGenerator()
         title_card_path = final_output_base / "title_card.png"
         await image_gen.generate_reddit_post_image(
@@ -117,7 +130,7 @@ async def mock_pipeline(output_dir_name: str = "test_mock_sync_fix"):
             score=story.score,
             author=story.author,
             output_path=title_card_path,
-            custom_keywords=["POLICE", "STEALING", "CAT"]
+            custom_keywords=ai_keywords
         )
         
         # 3. Process Title Audio & JSON
@@ -230,7 +243,7 @@ async def mock_pipeline(output_dir_name: str = "test_mock_sync_fix"):
             output_path=part_output_path,
             overlay_image_path=title_card_path,
             timing_data=timing_data,
-            custom_keywords=["CAT", "POLICE"]
+            custom_keywords=ai_keywords
         )
         
         if result_path:
