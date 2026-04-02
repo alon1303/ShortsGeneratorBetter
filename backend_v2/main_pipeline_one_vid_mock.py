@@ -23,68 +23,79 @@ from reddit_story.models import AudioChunk, WordTimestamp
 from reddit_story.reddit_client import RedditStory
 from reddit_story.video_composer import VideoComposer
 from reddit_story.image_generator_new import RedditImageGenerator
-from reddit_story.audio_utils import remove_silences, map_timestamp_to_new_time, adjust_word_timestamps, get_audio_duration
+from reddit_story.audio_utils import (
+    remove_silences,
+    map_timestamp_to_new_time,
+    adjust_word_timestamps,
+    get_audio_duration,
+)
 from config.settings import settings
 
 # Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION FOR MOCK ---
-STORY_CACHE_ID = "277ea356d1b17428286260d009965191_1774084097"
-TITLE_CACHE_ID = "8ded64a1b5445a40bf9761aee75933e6_1774084084"
+STORY_CACHE_ID = "2ae71d348919c3a00e22b936bf45e19b_1774258834"
+TITLE_CACHE_ID = "422e12bc2d279215785a9ce9bb6f121e_1774258806"
 
 # נתיבים מדויקים מקריאת תיקיית השורש
-CACHE_DIR = root_path / "cache" / "elevenlabs" / "voices"
+CACHE_DIR = base_path / "cache" / "elevenlabs" / "voices"
 
 BG_MUSIC_PATH = root_path / "backend_v2" / "assets" / "audio" / "lofi_bg.mp3"
 if not BG_MUSIC_PATH.exists():
     BG_MUSIC_PATH = root_path / "assets" / "audio" / "lofi_bg.mp3"
 
-STORY_TITLE = "AITA for getting upset at my girlfriend for mocking me when i cried after watching a show with emotionally deep ending?"
- 
+STORY_TITLE = "AITA for cutting off my son after his mom passed away? Part 3"
+
+
 def load_timestamps(json_path: Path):
     if not json_path.exists():
         return []
-        
-    with open(json_path, 'r', encoding='utf-8') as f:
+
+    with open(json_path, "r", encoding="utf-8") as f:
         raw_data = json.load(f)
-        if isinstance(raw_data, dict) and 'alignment' in raw_data:
-            raw_timestamps = raw_data['alignment']['characters']
+        if isinstance(raw_data, dict) and "alignment" in raw_data:
+            raw_timestamps = raw_data["alignment"]["characters"]
         else:
             raw_timestamps = raw_data
 
     word_timestamps = []
     for t in raw_timestamps:
         if isinstance(t, dict):
-            word_timestamps.append(WordTimestamp(
-                word=t.get('word', t.get('character', '')), 
-                start=t['start'], 
-                end=t['end'], 
-                confidence=t.get('confidence', 1.0)
-            ))
+            word_timestamps.append(
+                WordTimestamp(
+                    word=t.get("word", t.get("character", "")),
+                    start=t["start"],
+                    end=t["end"],
+                    confidence=t.get("confidence", 1.0),
+                )
+            )
     return word_timestamps
+
 
 async def mock_pipeline(output_dir_name: str = "test_mock_sync_fix"):
     logger.info("🧪 Starting RAW MOCK Pipeline with LoFi & 1.4x Speed")
-    
+
     # הגדרת המהירות הסופית של הסרטון (וידאו + אודיו) ל-1.4
     settings.FINAL_VIDEO_SPEED = 1.4
-    
+
     # 0. Setup Output Directory
     final_output_base = settings.OUTPUT_DIR / output_dir_name
     final_output_base.mkdir(parents=True, exist_ok=True)
-    
+
     title_audio_raw = CACHE_DIR / f"{TITLE_CACHE_ID}.mp3"
     title_json_raw = CACHE_DIR / f"{TITLE_CACHE_ID}.json"
     story_audio_raw = CACHE_DIR / f"{STORY_CACHE_ID}.mp3"
-    
+
     # Support both .mp3 and .wav extensions for cache
     if not story_audio_raw.exists():
         story_audio_raw = CACHE_DIR / f"{STORY_CACHE_ID}.wav"
     if not title_audio_raw.exists():
         title_audio_raw = CACHE_DIR / f"{TITLE_CACHE_ID}.wav"
-        
+
     story_json_raw = CACHE_DIR / f"{STORY_CACHE_ID}.json"
 
     if not story_audio_raw.exists() or not title_audio_raw.exists():
@@ -105,14 +116,15 @@ async def mock_pipeline(output_dir_name: str = "test_mock_sync_fix"):
             author="CatOwner",
             is_nsfw=False,
             word_count=200,
-            estimated_duration=60.0
+            estimated_duration=60.0,
         )
-        
+
         # 2. Extract Keywords using Gemini
         ai_keywords = []
         try:
             # Import the keyword extractor
             from reddit_story.keyword_extractor import keyword_extractor
+
             logger.info("Extracting keywords using Gemini...")
             ai_keywords = await keyword_extractor.extract_keywords(story.title)
             logger.info(f"AI extracted keywords: {ai_keywords}")
@@ -120,7 +132,7 @@ async def mock_pipeline(output_dir_name: str = "test_mock_sync_fix"):
             logger.error(f"Failed to extract keywords with Gemini: {e}")
             # Fallback to heuristic keywords
             ai_keywords = ["POLICE", "STEALING", "CAT"]
-        
+
         # 3. Preparation (Image)
         image_gen = RedditImageGenerator()
         title_card_path = final_output_base / "title_card.png"
@@ -130,15 +142,15 @@ async def mock_pipeline(output_dir_name: str = "test_mock_sync_fix"):
             score=story.score,
             author=story.author,
             output_path=title_card_path,
-            custom_keywords=ai_keywords
+            custom_keywords=ai_keywords,
         )
-        
+
         # 3. Process Title Audio & JSON
         logger.info("Processing Title...")
         title_timestamps = load_timestamps(title_json_raw)
         cleaned_title_path, title_timing_map = remove_silences(title_audio_raw)
         title_duration = get_audio_duration(cleaned_title_path)
-        
+
         if title_timing_map and title_timestamps:
             for ts in title_timestamps:
                 ts.start = map_timestamp_to_new_time(ts.start, title_timing_map)
@@ -163,49 +175,63 @@ async def mock_pipeline(output_dir_name: str = "test_mock_sync_fix"):
         delay_ms = int(total_gap * 1000)
         story_start_time = title_duration + total_gap
 
-        logger.info(f"Merging audio. Title duration: {title_duration}s, Gap: {total_gap}s, Story starts at: {story_start_time}s")
+        logger.info(
+            f"Merging audio. Title duration: {title_duration}s, Gap: {total_gap}s, Story starts at: {story_start_time}s"
+        )
 
-        merged_audio_path = final_output_base / f"merged_mock_{uuid.uuid4().hex[:8]}.wav"
-        
+        merged_audio_path = (
+            final_output_base / f"merged_mock_{uuid.uuid4().hex[:8]}.wav"
+        )
+
         cmd = [
-            'ffmpeg', '-y',
-            '-i', str(cleaned_title_path),
-            '-i', str(cleaned_story_path)
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(cleaned_title_path),
+            "-i",
+            str(cleaned_story_path),
         ]
-        
+
         if BG_MUSIC_PATH.exists():
             logger.info("🎵 Adding Lo-Fi background music...")
-            cmd.extend(['-stream_loop', '-1', '-i', str(BG_MUSIC_PATH)])
+            cmd.extend(["-stream_loop", "-1", "-i", str(BG_MUSIC_PATH)])
             # הגדלנו את הווליום ל-25% והוספנו normalize=0 כדי לא להחליש את הקריין
             filter_str = (
-                f'[1:a]adelay={delay_ms}|{delay_ms}[delayed_story];'
-                f'[0:a][delayed_story]concat=n=2:v=0:a=1[voice];'
-                f'[2:a]volume=0.25[bg];'
-                f'[voice][bg]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[out]'
+                f"[1:a]adelay={delay_ms}|{delay_ms}[delayed_story];"
+                f"[0:a][delayed_story]concat=n=2:v=0:a=1[voice];"
+                f"[2:a]atrim=start=17,asetpts=PTS-STARTPTS,volume=0.25[bg];"
+                f"[voice][bg]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[out]"
             )
         else:
             logger.warning("⚠️ Lo-Fi background music not found. Merging without it.")
             filter_str = (
-                f'[1:a]adelay={delay_ms}|{delay_ms}[delayed_story];'
-                f'[0:a][delayed_story]concat=n=2:v=0:a=1[out]'
+                f"[1:a]adelay={delay_ms}|{delay_ms}[delayed_story];"
+                f"[0:a][delayed_story]concat=n=2:v=0:a=1[out]"
             )
-            
-        cmd.extend([
-            '-filter_complex', filter_str,
-            '-map', '[out]',
-            '-c:a', 'pcm_s16le',
-            str(merged_audio_path)
-        ])
-        
+
+        cmd.extend(
+            [
+                "-filter_complex",
+                filter_str,
+                "-map",
+                "[out]",
+                "-c:a",
+                "pcm_s16le",
+                str(merged_audio_path),
+            ]
+        )
+
         process = subprocess.run(cmd, capture_output=True, text=True)
-        
+
         # הדפסת שגיאות אם ffmpeg נכשל מסיבה כלשהי
         if process.returncode != 0:
             logger.error(f"❌ FFmpeg merge failed! Error:\n{process.stderr}")
             return
 
         # 6. Adjust Timestamps & Create Final Chunk
-        adjusted_story_timestamps = adjust_word_timestamps(story_timestamps, story_start_time)
+        adjusted_story_timestamps = adjust_word_timestamps(
+            story_timestamps, story_start_time
+        )
         combined_timestamps = title_timestamps + adjusted_story_timestamps
         total_duration = title_duration + total_gap + story_duration
 
@@ -219,7 +245,7 @@ async def mock_pipeline(output_dir_name: str = "test_mock_sync_fix"):
             file_size_bytes=merged_audio_path.stat().st_size,
             is_first_part=True,
             part_index="1/1",
-            title_word_count=len(title_timestamps)
+            title_word_count=len(title_timestamps),
         )
 
         timing_data = {
@@ -230,29 +256,31 @@ async def mock_pipeline(output_dir_name: str = "test_mock_sync_fix"):
             "pop_in_duration": 0.6,
             "pop_out_duration": pop_out_duration,
             "card_start_time": 0.0,
-            "card_end_time": card_end_time
+            "card_end_time": card_end_time,
         }
 
         # 7. Video Composition
         logger.info("Composing Final Video...")
         composer = VideoComposer()
         part_output_path = final_output_base / "sync_test_video.mp4"
-        
+
         result_path = composer.create_video_part(
             audio_chunk=chunk,
             output_path=part_output_path,
             overlay_image_path=title_card_path,
             timing_data=timing_data,
-            custom_keywords=ai_keywords
+            custom_keywords=ai_keywords,
         )
-        
+
         if result_path:
             logger.info(f"✅ SYNC TEST SUCCESS: {result_path}")
 
     except Exception as e:
         logger.error(f"💥 Mock failed: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
+
 
 if __name__ == "__main__":
     asyncio.run(mock_pipeline())
